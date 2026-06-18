@@ -17,6 +17,7 @@ export default function UploadArea({
   function handleFile(file: File) {
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       setError("El archivo debe ser un PDF.");
+      if (inputRef.current) inputRef.current.value = "";
       return;
     }
     setError(null);
@@ -26,6 +27,10 @@ export default function UploadArea({
   function onDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setIsDragging(false);
+    if (e.dataTransfer.files.length > 1) {
+      setError("Solo se puede procesar un archivo a la vez.");
+      return;
+    }
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
   }
@@ -38,6 +43,8 @@ export default function UploadArea({
   return (
     <div>
       <div
+        role="button"
+        tabIndex={0}
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -45,6 +52,12 @@ export default function UploadArea({
         onDragLeave={() => setIsDragging(false)}
         onDrop={onDrop}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
         className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
           isDragging
             ? "border-primary bg-primary-light/20"
@@ -63,7 +76,7 @@ export default function UploadArea({
         />
       </div>
       {error && (
-        <p className="text-red-600 text-sm mt-2">{error}</p>
+        <p role="alert" className="text-red-600 text-sm mt-2">{error}</p>
       )}
     </div>
   );
