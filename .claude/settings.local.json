@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash *)",
+      "Bash(npm create *)",
+      "Bash(yes)",
+      "Bash(mv temp-init/* .)",
+      "Bash(mv temp-init/.* .)",
+      "Bash(rmdir temp-init *)",
+      "Bash(npm install *)",
+      "Bash(git init *)"
+    ]
+  }
+}
