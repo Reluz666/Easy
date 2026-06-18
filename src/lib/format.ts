@@ -2,7 +2,7 @@ export type FolioFormat =
   | "Folio N de TOTAL"
   | "Página N de TOTAL"
   | "N / TOTAL"
-  | "Solo N";
+  | "N";
 
 export type NumberStyle = "numbers" | "letters" | "both";
 

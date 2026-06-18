@@ -35,9 +35,9 @@ export async function renderThumbnail(
       ? [canvas.width / viewport.width, 0, 0, canvas.height / viewport.height, 0, 0]
       : undefined;
 
-    await page.render({ canvasContext: context, viewport, transform }).promise;
+    await page.render({ canvas, canvasContext: context, viewport, transform }).promise;
     return canvas.toDataURL("image/png");
   } finally {
-    pdf.destroy();
+    pdf.cleanup();
   }
 }

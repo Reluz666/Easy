@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatFolio, type FolioFormat } from "../lib/format";
+import { formatFolio } from "../lib/format";
 
 describe("formatFolio", () => {
   it("formats 'Folio N de TOTAL'", () => {
