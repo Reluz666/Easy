@@ -3,6 +3,9 @@ import { PDFDocument } from "pdf-lib";
 import { applyFolio } from "./applyFolio";
 import { DEFAULT_FOLIAR_CONFIG } from "../foliar/types";
 
+const toBinaryString = (bytes: Uint8Array): string =>
+  new TextDecoder("latin1").decode(bytes);
+
 async function makePdfBytes(numPages: number, pageW = 612, pageH = 792): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   for (let i = 0; i < numPages; i++) {
@@ -41,7 +44,7 @@ describe("applyFolio", () => {
     const configB = { ...DEFAULT_FOLIAR_CONFIG, range: { initialNumber: 10, from: 1, to: 3 } };
     const resultA = await applyFolio(bytes, configA);
     const resultB = await applyFolio(bytes, configB);
-    expect(Buffer.from(resultA).toString("binary")).not.toBe(Buffer.from(resultB).toString("binary"));
+    expect(toBinaryString(resultA)).not.toBe(toBinaryString(resultB));
   });
 
   it("throws Spanish error if the PDF is invalid", async () => {
