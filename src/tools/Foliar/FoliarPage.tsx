@@ -163,7 +163,7 @@ export default function FoliarPage() {
           config={config}
           onPageChange={setCurrentPage}
         />
-        <div className="bg-surface border borderBorder rounded-lg p-4">
+        <div className="bg-surface border border-border rounded-lg p-4">
           <h2 className="font-semibold text-text mb-4 pb-2 border-b border-border">Configuración del folio</h2>
           <FoliarConfigPanel
             config={config}
