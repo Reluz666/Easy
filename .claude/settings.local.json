@@ -9,7 +9,9 @@
       "Bash(rmdir temp-init *)",
       "Bash(npm install *)",
       "Bash(git init *)",
-      "Bash(git -C \"D:/Archivos de la U/PROYECTOS/Easy\" log --oneline -5)"
+      "Bash(git -C \"D:/Archivos de la U/PROYECTOS/Easy\" log --oneline -5)",
+      "mcp__plugin_oh-my-claudecode_t__lsp_diagnostics",
+      "Bash(npx tsc *)"
     ]
   }
 }
