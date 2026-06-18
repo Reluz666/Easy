@@ -8,7 +8,8 @@
       "Bash(mv temp-init/.* .)",
       "Bash(rmdir temp-init *)",
       "Bash(npm install *)",
-      "Bash(git init *)"
+      "Bash(git init *)",
+      "Bash(git -C \"D:/Archivos de la U/PROYECTOS/Easy\" log --oneline -5)"
     ]
   }
 }
