@@ -8,7 +8,7 @@ async function makePdfFile(numPages: number): Promise<File> {
     doc.addPage([200, 200]);
   }
   const bytes = await doc.save();
-  return new File([new Blob([bytes], { type: "application/pdf" })], "test.pdf", { type: "application/pdf" });
+  return new File([new Uint8Array(bytes)], "test.pdf", { type: "application/pdf" });
 }
 
 describe("loadPdfFromFile", () => {
