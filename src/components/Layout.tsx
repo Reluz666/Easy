@@ -22,7 +22,7 @@ export default function Layout({ children }: LayoutProps) {
           </Link>
         )}
       </header>
-      <main className="flex-1 p-6">{children}</main>
+      <main className="flex-1 p-6 max-w-4xl mx-auto w-full">{children}</main>
     </div>
   );
 }
