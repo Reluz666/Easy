@@ -80,7 +80,7 @@ self.addEventListener("message", async (e: MessageEvent<FoliarRequest>) => {
       self.postMessage(progress);
     }
 
-    const bytes = await pdf.save();
+    const bytes = await pdf.save({ useObjectStreams: false });
     const complete: FoliarResponse = { type: "complete", bytes };
     self.postMessage(complete);
   } catch (err) {

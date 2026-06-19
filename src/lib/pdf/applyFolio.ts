@@ -62,5 +62,5 @@ export async function applyFolio(
     });
   }
 
-  return pdf.save();
+  return pdf.save({ useObjectStreams: false });
 }
