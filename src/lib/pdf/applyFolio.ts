@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, PDFName, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatFolio } from "../format";
 import { getFolioPdfCoords } from "../foliar/position";
 import type { FoliarConfig, FolioFont } from "../foliar/types";
@@ -31,6 +31,13 @@ export async function applyFolio(
   } catch {
     throw new Error("No se pudo leer el PDF. Verificá que no esté protegido con contraseña ni dañado.");
   }
+
+  // Strip Producer/Creator metadata. pdf-lib sets these to strings that
+  // include external URLs (https://github.com/Hopding/pdf-lib), which some
+  // PDF viewers try to resolve at open time. The CORS rules around file://
+  // origins make that resolution fail and the viewer hangs on "loading".
+  pdf.getInfoDict().delete(PDFName.of("Producer"));
+  pdf.getInfoDict().delete(PDFName.of("Creator"));
 
   const fontName = FONT_MAP[config.font];
   const font: PDFFont = await pdf.embedFont(fontName);
