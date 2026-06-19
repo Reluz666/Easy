@@ -28,7 +28,7 @@ export const FOLIO_FORMAT_TEMPLATES: FolioFormatTemplate[] = [
   "N",
 ];
 
-export type NumberStyle = "numbers" | "letters" | "both";
+export type NumberStyle = "numbers" | "letters" | "both" | "words";
 
 export type FolioFont = "Helvetica" | "TimesRoman" | "Courier" | "Verdana" | "Georgia";
 

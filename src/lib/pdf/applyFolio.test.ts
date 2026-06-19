@@ -52,4 +52,17 @@ describe("applyFolio", () => {
     const config = DEFAULT_FOLIAR_CONFIG;
     await expect(applyFolio(garbage, config)).rejects.toThrow(/No se pudo leer el PDF/);
   });
+
+  it("works with numberStyle: 'words' (text encoding verified via format.test.ts)", async () => {
+    const bytes = await makePdfBytes(3);
+    const config = {
+      ...DEFAULT_FOLIAR_CONFIG,
+      numberStyle: "words" as const,
+      range: { initialNumber: 1, from: 1, to: 3 },
+    };
+    const result = await applyFolio(bytes, config);
+    const reloaded = await PDFDocument.load(result);
+    expect(reloaded.getPageCount()).toBe(3);
+    expect(result.byteLength).toBeGreaterThan(bytes.byteLength);
+  });
 });

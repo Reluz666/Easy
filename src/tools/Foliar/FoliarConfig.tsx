@@ -90,8 +90,8 @@ export default function FoliarConfigPanel({ config, totalPages, rangeError, onCh
       <div>
         <Label>Tipo de numeración</Label>
         <div role="radiogroup" aria-label="Tipo de numeración" className="flex gap-1.5">
-          {(["numbers", "letters", "both"] as NumberStyle[]).map((style) => {
-            const label = style === "numbers" ? "Números" : style === "letters" ? "Letras" : "Ambas";
+          {(["numbers", "letters", "both", "words"] as NumberStyle[]).map((style) => {
+            const label = style === "numbers" ? "Números" : style === "letters" ? "Letras" : style === "both" ? "Ambas" : "Palabras";
             const selected = config.numberStyle === style;
             return (
               <button
