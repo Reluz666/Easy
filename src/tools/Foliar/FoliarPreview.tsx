@@ -91,7 +91,7 @@ export default function FoliarPreview({
           const folioIndex = pageNumber - config.range.from;
           const folioNumber = config.range.initialNumber + folioIndex;
           const totalInRange = config.range.to - config.range.from + 1;
-          const text = formatFolio("N / TOTAL", folioNumber, totalInRange, config.numberStyle);
+          const text = formatFolio(config.numberStyle, folioNumber, totalInRange);
           const fontSize = config.fontSize * 1.5; // scale for canvas
           context.font = `${fontSize}px ${config.font}`;
           const metrics = context.measureText(text);

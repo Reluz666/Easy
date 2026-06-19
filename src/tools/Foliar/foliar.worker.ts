@@ -58,7 +58,7 @@ self.addEventListener("message", async (e: MessageEvent<FoliarRequest>) => {
         const page: PDFPage = pages[pageIndex];
         if (!page) continue;
         const folioNumber = config.range.initialNumber + i;
-        const text = formatFolio("N / TOTAL", folioNumber, totalInRange, config.numberStyle);
+        const text = formatFolio(config.numberStyle, folioNumber, totalInRange);
         const textWidth = font.widthOfTextAtSize(text, config.fontSize);
         const { x, y } = getFolioPdfCoords(
           config.position,

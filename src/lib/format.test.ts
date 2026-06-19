@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { formatFolio, type FolioFormat, type NumberStyle } from "./format";
+import { formatFolio, numberToWords, type NumberStyle } from "./format";
 
-describe("formatFolio with words style", () => {
+describe("numberToWords", () => {
   it.each<[number, string]>([
     [1, "uno"],
     [2, "dos"],
@@ -33,34 +33,37 @@ describe("formatFolio with words style", () => {
     [2000, "dos mil"],
     [9999, "nueve mil novecientos noventa y nueve"],
   ])("converts %i to '%s'", (n, expected) => {
-    expect(formatFolio("N", n, 10, "words")).toBe(expected);
+    expect(numberToWords(n)).toBe(expected);
   });
 });
 
-describe("formatFolio integration with words", () => {
-  const cases: Array<{ template: FolioFormat; current: number; total: number; style: NumberStyle; expected: string }> = [
-    { template: "Folio N de TOTAL", current: 3, total: 10, style: "words", expected: "Folio tres de 10" },
-    { template: "Página N de TOTAL", current: 1, total: 5, style: "words", expected: "Página uno de 5" },
-    { template: "N / TOTAL", current: 22, total: 100, style: "words", expected: "veintidós / 100" },
-    { template: "N", current: 100, total: 100, style: "words", expected: "cien" },
+describe("formatFolio by style", () => {
+  const cases: Array<{ style: NumberStyle; current: number; total: number; expected: string }> = [
+    // numbers — solo el número de página
+    { style: "numbers", current: 1, total: 10, expected: "1" },
+    { style: "numbers", current: 5, total: 10, expected: "5" },
+    { style: "numbers", current: 10, total: 10, expected: "10" },
+
+    // words — solo la palabra
+    { style: "words", current: 1, total: 10, expected: "uno" },
+    { style: "words", current: 3, total: 10, expected: "tres" },
+    { style: "words", current: 22, total: 100, expected: "veintidós" },
+    { style: "words", current: 100, total: 100, expected: "cien" },
+
+    // both — palabra + número
+    { style: "both", current: 1, total: 10, expected: "uno 1" },
+    { style: "both", current: 3, total: 10, expected: "tres 3" },
+    { style: "both", current: 5, total: 10, expected: "cinco 5" },
+    { style: "both", current: 22, total: 100, expected: "veintidós 22" },
+
+    // n-t — número / total
+    { style: "n-t", current: 1, total: 10, expected: "1/10" },
+    { style: "n-t", current: 3, total: 10, expected: "3/10" },
+    { style: "n-t", current: 10, total: 10, expected: "10/10" },
+    { style: "n-t", current: 7, total: 20, expected: "7/20" },
   ];
 
-  it.each(cases)("$template + words($current) = $expected", ({ template, current, total, style, expected }) => {
-    expect(formatFolio(template, current, total, style)).toBe(expected);
-  });
-});
-
-describe("formatFolio with other styles (regression)", () => {
-  it("numbers", () => {
-    expect(formatFolio("Folio N de TOTAL", 3, 10, "numbers")).toBe("Folio 3 de 10");
-  });
-  it("letters", () => {
-    expect(formatFolio("Folio N de TOTAL", 3, 10, "letters")).toBe("Folio C de 10");
-  });
-  it("both (number + word)", () => {
-    expect(formatFolio("Folio N de TOTAL", 3, 10, "both")).toBe("Folio tres 3 de 10");
-  });
-  it("defaults to numbers when style omitted", () => {
-    expect(formatFolio("N", 5, 5)).toBe("5");
+  it.each(cases)("$style ($current of $total) = '$expected'", ({ style, current, total, expected }) => {
+    expect(formatFolio(style, current, total)).toBe(expected);
   });
 });

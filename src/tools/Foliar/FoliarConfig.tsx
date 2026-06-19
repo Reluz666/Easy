@@ -73,16 +73,20 @@ export default function FoliarConfigPanel({ config, totalPages, rangeError, onCh
       <div>
         <Label>Tipo de numeración</Label>
         <div role="radiogroup" aria-label="Tipo de numeración" className="flex gap-1.5">
-          {(["numbers", "letters", "both", "words"] as NumberStyle[]).map((style) => {
-            const label = style === "numbers" ? "Números" : style === "letters" ? "Letras" : style === "both" ? "Ambas" : "Palabras";
-            const selected = config.numberStyle === style;
+          {([
+            { value: "numbers", label: "Número" },
+            { value: "words", label: "Palabra" },
+            { value: "both", label: "Ambas" },
+            { value: "n-t", label: "N/T" },
+          ] as const).map(({ value, label }) => {
+            const selected = config.numberStyle === value;
             return (
               <button
-                key={style}
+                key={value}
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                onClick={() => update("numberStyle", style)}
+                onClick={() => update("numberStyle", value as NumberStyle)}
                 className={`flex-1 px-2 py-1.5 text-sm rounded border transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
                   selected
                     ? "bg-primary-light border-primary text-primary"

@@ -15,7 +15,7 @@ export const FOLIO_POSITIONS: FolioPosition[] = [
   "bottom-left", "bottom-center", "bottom-right",
 ];
 
-export type NumberStyle = "numbers" | "letters" | "both" | "words";
+export type NumberStyle = "numbers" | "words" | "both" | "n-t";
 
 export type FolioFont = "Helvetica" | "TimesRoman" | "Courier" | "Verdana" | "Georgia";
 
