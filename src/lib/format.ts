@@ -54,7 +54,7 @@ function numberToWords(n: number): string {
 function formatNumber(n: number, style: NumberStyle): string {
   if (style === "letters") return numberToLetters(n);
   if (style === "words") return numberToWords(n);
-  if (style === "both") return `${n}-${numberToLetters(n)}`;
+  if (style === "both") return `${numberToWords(n)} ${n}`;
   return String(n);
 }
 

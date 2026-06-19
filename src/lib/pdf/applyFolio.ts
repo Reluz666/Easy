@@ -44,7 +44,7 @@ export async function applyFolio(
     const page: PDFPage = pages[pageIndex];
     if (!page) continue;
     const folioNumber = initialNumber + i;
-    const text = formatFolio(config.format, folioNumber, totalInRange, config.numberStyle);
+    const text = formatFolio("N / TOTAL", folioNumber, totalInRange, config.numberStyle);
     const textWidth = font.widthOfTextAtSize(text, config.fontSize);
     const { x, y } = getFolioPdfCoords(
       config.position,

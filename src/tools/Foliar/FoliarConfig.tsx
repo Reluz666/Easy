@@ -1,12 +1,10 @@
 import {
   FOLIO_POSITIONS,
-  FOLIO_FORMAT_TEMPLATES,
   FOLIO_FONTS,
   FOLIO_FONT_SIZE_MIN,
   FOLIO_FONT_SIZE_MAX,
   type FoliarConfig,
   type FolioPosition,
-  type FolioFormatTemplate,
   type FolioFont,
   type NumberStyle,
 } from "../../lib/foliar/types";
@@ -69,21 +67,6 @@ export default function FoliarConfigPanel({ config, totalPages, rangeError, onCh
             );
           })}
         </div>
-      </div>
-
-      {/* Format */}
-      <div>
-        <Label htmlFor="foliar-format">Formato</Label>
-        <select
-          id="foliar-format"
-          value={config.format}
-          onChange={(e) => update("format", e.target.value as FolioFormatTemplate)}
-          className="w-full bg-surface border border-border rounded px-2 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          {FOLIO_FORMAT_TEMPLATES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
       </div>
 
       {/* Number style */}

@@ -15,19 +15,6 @@ export const FOLIO_POSITIONS: FolioPosition[] = [
   "bottom-left", "bottom-center", "bottom-right",
 ];
 
-export type FolioFormatTemplate =
-  | "Folio N de TOTAL"
-  | "Página N de TOTAL"
-  | "N / TOTAL"
-  | "N";
-
-export const FOLIO_FORMAT_TEMPLATES: FolioFormatTemplate[] = [
-  "Folio N de TOTAL",
-  "Página N de TOTAL",
-  "N / TOTAL",
-  "N",
-];
-
 export type NumberStyle = "numbers" | "letters" | "both" | "words";
 
 export type FolioFont = "Helvetica" | "TimesRoman" | "Courier" | "Verdana" | "Georgia";
@@ -42,7 +29,6 @@ export const FOLIO_FONTS: FolioFont[] = [
 
 export type FoliarConfig = {
   position: FolioPosition;
-  format: FolioFormatTemplate;
   numberStyle: NumberStyle;
   font: FolioFont;
   fontSize: number;     // pt; range 6–72
@@ -56,7 +42,6 @@ export type FoliarConfig = {
 
 export const DEFAULT_FOLIAR_CONFIG: FoliarConfig = {
   position: "bottom-center",
-  format: "Folio N de TOTAL",
   numberStyle: "numbers",
   font: "Helvetica",
   fontSize: 12,

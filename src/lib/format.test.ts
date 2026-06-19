@@ -57,8 +57,8 @@ describe("formatFolio with other styles (regression)", () => {
   it("letters", () => {
     expect(formatFolio("Folio N de TOTAL", 3, 10, "letters")).toBe("Folio C de 10");
   });
-  it("both", () => {
-    expect(formatFolio("Folio N de TOTAL", 3, 10, "both")).toBe("Folio 3-C de 10");
+  it("both (number + word)", () => {
+    expect(formatFolio("Folio N de TOTAL", 3, 10, "both")).toBe("Folio tres 3 de 10");
   });
   it("defaults to numbers when style omitted", () => {
     expect(formatFolio("N", 5, 5)).toBe("5");
