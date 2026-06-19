@@ -1,4 +1,4 @@
-import { PDFDocument, PDFName, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
 import { formatFolio } from "../format";
 import { getFolioPdfCoords } from "../foliar/position";
 import type { FoliarConfig, FolioFont } from "../foliar/types";
@@ -25,30 +25,33 @@ export async function applyFolio(
   bytes: Uint8Array,
   config: FoliarConfig
 ): Promise<Uint8Array> {
-  let pdf: PDFDocument;
+  let sourcePdf: PDFDocument;
   try {
-    pdf = await PDFDocument.load(bytes, { ignoreEncryption: false });
+    sourcePdf = await PDFDocument.load(bytes, { ignoreEncryption: false });
   } catch {
     throw new Error("No se pudo leer el PDF. Verificá que no esté protegido con contraseña ni dañado.");
   }
 
-  // Strip Producer/Creator metadata. pdf-lib sets these to strings that
-  // include external URLs (https://github.com/Hopding/pdf-lib), which some
-  // PDF viewers try to resolve at open time. The CORS rules around file://
-  // origins make that resolution fail and the viewer hangs on "loading".
-  pdf.getInfoDict().delete(PDFName.of("Producer"));
-  pdf.getInfoDict().delete(PDFName.of("Creator"));
-
-  const fontName = FONT_MAP[config.font];
-  const font: PDFFont = await pdf.embedFont(fontName);
-  const color = hexToRgb(config.color);
   const { from, to, initialNumber } = config.range;
   const totalInRange = to - from + 1;
-  const pages = pdf.getPages();
+
+  // Copy pages to a fresh document instead of modifying the source in place.
+  // pdf-lib's in-place modify + save can corrupt content streams on pages
+  // 2..N of PDFs with xref streams, incremental updates, or font subsets
+  // (those pages render blank after the round-trip in Edge / Chrome).
+  const targetPdf = await PDFDocument.create();
+  const pageIndices = sourcePdf.getPageIndices();
+  const copiedPages = await targetPdf.copyPages(sourcePdf, pageIndices);
+  copiedPages.forEach((page) => targetPdf.addPage(page));
+
+  const fontName = FONT_MAP[config.font];
+  const font: PDFFont = await targetPdf.embedFont(fontName);
+  const color = hexToRgb(config.color);
+  const targetPages = targetPdf.getPages();
 
   for (let i = 0; i < totalInRange; i++) {
     const pageIndex = from - 1 + i;
-    const page: PDFPage = pages[pageIndex];
+    const page = targetPages[pageIndex];
     if (!page) continue;
     const folioNumber = initialNumber + i;
     const text = formatFolio(config.numberStyle, folioNumber, totalInRange);
@@ -69,5 +72,5 @@ export async function applyFolio(
     });
   }
 
-  return pdf.save({ useObjectStreams: false });
+  return targetPdf.save({ useObjectStreams: false });
 }

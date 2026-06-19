@@ -39,11 +39,16 @@ self.addEventListener("message", async (e: MessageEvent<FoliarRequest>) => {
   const { fileBytes, config } = e.data;
 
   try {
-    const pdf = await PDFDocument.load(fileBytes, { ignoreEncryption: false });
+    const sourcePdf = await PDFDocument.load(fileBytes, { ignoreEncryption: false });
     const totalInRange = config.range.to - config.range.from + 1;
-    const font: PDFFont = await pdf.embedFont(FONT_MAP[config.font]);
+    const targetPdf = await PDFDocument.create();
+    const pageIndices = sourcePdf.getPageIndices();
+    const copiedPages = await targetPdf.copyPages(sourcePdf, pageIndices);
+    copiedPages.forEach((page) => targetPdf.addPage(page));
+
+    const font: PDFFont = await targetPdf.embedFont(FONT_MAP[config.font]);
     const color = hexToRgb(config.color);
-    const pages = pdf.getPages();
+    const pages = targetPdf.getPages();
 
     for (let batchStart = 0; batchStart < totalInRange; batchStart += BATCH_SIZE) {
       if (cancelled) {
@@ -55,7 +60,7 @@ self.addEventListener("message", async (e: MessageEvent<FoliarRequest>) => {
       const batchEnd = Math.min(batchStart + BATCH_SIZE, totalInRange);
       for (let i = batchStart; i < batchEnd; i++) {
         const pageIndex = config.range.from - 1 + i;
-        const page: PDFPage = pages[pageIndex];
+        const page = pages[pageIndex];
         if (!page) continue;
         const folioNumber = config.range.initialNumber + i;
         const text = formatFolio(config.numberStyle, folioNumber, totalInRange);
@@ -80,7 +85,7 @@ self.addEventListener("message", async (e: MessageEvent<FoliarRequest>) => {
       self.postMessage(progress);
     }
 
-    const bytes = await pdf.save({ useObjectStreams: false });
+    const bytes = await targetPdf.save({ useObjectStreams: false });
     const complete: FoliarResponse = { type: "complete", bytes };
     self.postMessage(complete);
   } catch (err) {
