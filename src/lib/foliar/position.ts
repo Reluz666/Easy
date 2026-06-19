@@ -7,11 +7,12 @@ export { FOLIO_MARGIN_PT };
  * Calcula el (x, y) en coordenadas del MediaBox del PDF donde debe dibujarse
  * el folio, considerando la rotación de la página (/Rotate) para que el folio
  * quede visualmente en la posición solicitada (top/middle/bottom × left/center/right)
- * y con orientación vertical (no acostado) en la vista del visor.
+ * y con la "orientación natural" de la página: horizontal en páginas verticales
+ * (/Rotate 0/180) y vertical en páginas apaisadas (/Rotate 90/270).
  *
- * `rotate` es el ángulo (en grados, CCW positivo) que se debe pasar a
- * `page.drawText` para que el texto quede de pie después de que el visor
- * aplique la rotación de la página.
+ * El texto se dibuja siempre horizontal en el MediaBox (rotate=0); el visor
+ * rota el folio junto con el resto de la página, así un folio apaisado queda
+ * vertical al ver la página, y uno vertical queda horizontal.
  */
 export function getFolioPdfCoords(
   position: FolioPosition,
@@ -51,18 +52,18 @@ export function getFolioPdfCoords(
   let mediaY: number;
   switch (rot) {
     case 90:
-      // Visual (vx, vyTop) ↔ MediaBox (pageWidth - vyTop, pageHeight - vx)
-      mediaX = pageWidth - visualYFromTop;
+      // Visual (vx, vyTop) ↔ MediaBox (vyTop, pageHeight - vx)
+      mediaX = visualYFromTop;
       mediaY = pageHeight - visualX;
       break;
     case 180:
-      // Visual (vx, vyTop) ↔ MediaBox (pageWidth - vx, vyTop)
+      // Visual (vx, vyTop) ↔ MediaBox (pageWidth - vx, pageHeight - vyTop)
       mediaX = pageWidth - visualX;
-      mediaY = visualYFromTop;
+      mediaY = pageHeight - visualYFromTop;
       break;
     case 270:
-      // Visual (vx, vyTop) ↔ MediaBox (vyTop, vx)
-      mediaX = visualYFromTop;
+      // Visual (vx, vyTop) ↔ MediaBox (pageWidth - vyTop, vx)
+      mediaX = pageWidth - visualYFromTop;
       mediaY = visualX;
       break;
     case 0:
@@ -71,10 +72,12 @@ export function getFolioPdfCoords(
       mediaY = pageHeight - visualYFromTop;
   }
 
-  // Contrarrestar la rotación de página para que el texto quede vertical
-  // en la vista. pdf-lib rota el texto en grados CCW; el visor rota la página
-  // /Rotate grados CCW; la composición neta debe ser 0.
-  const textRotate = rot === 0 ? 0 : -rot;
+  // El folio debe quedar en la "orientación natural" de la página: horizontal
+  // en páginas verticales (/Rotate 0/180) y vertical en páginas apaisadas
+  // (/Rotate 90/270). Por eso NO se contrarresta la rotación de la página:
+  // se dibuja el texto horizontal en el MediaBox y el visor lo rota junto
+  // con el resto de la página.
+  const textRotate = 0;
 
   return { x: mediaX, y: mediaY, rotate: textRotate };
 }

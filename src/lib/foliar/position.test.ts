@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { getFolioPdfCoords, FOLIO_MARGIN_PT } from "./position";
 
 describe("getFolioPdfCoords (no rotation)", () => {
-  const pageWidth = 612;   // 8.5 x 72
-  const pageHeight = 792;  // 11  x 72
+  const pageWidth = 612;
+  const pageHeight = 792;
   const textWidth = 60;
   const fontSize = 12;
   const margin = FOLIO_MARGIN_PT;
@@ -69,30 +69,33 @@ describe("getFolioPdfCoords (no rotation)", () => {
 });
 
 describe("getFolioPdfCoords with page rotation", () => {
-  const mediaW = 842; // A4 landscape
+  // Test uses A4 landscape media (842 × 595) as the base dimensions, then
+  // exercises all four /Rotate values by treating the function's pageWidth /
+  // pageHeight args as the MediaBox (not the visual viewport).
+  const mediaW = 842;
   const mediaH = 595;
   const textWidth = 30;
   const fontSize = 12;
   const margin = 24;
 
-  it("rotation=90: counter-rotates text by -90", () => {
+  it("rotation=90: rotate stays 0 (text follows page orientation)", () => {
     const { rotate } = getFolioPdfCoords("bottom-center", mediaW, mediaH, textWidth, fontSize, 90);
-    expect(rotate).toBe(-90);
+    expect(rotate).toBe(0);
   });
 
-  it("rotation=180: counter-rotates text by -180", () => {
+  it("rotation=180: rotate stays 0", () => {
     const { rotate } = getFolioPdfCoords("bottom-center", mediaW, mediaH, textWidth, fontSize, 180);
-    expect(rotate).toBe(-180);
+    expect(rotate).toBe(0);
   });
 
-  it("rotation=270: counter-rotates text by -270", () => {
+  it("rotation=270: rotate stays 0", () => {
     const { rotate } = getFolioPdfCoords("bottom-center", mediaW, mediaH, textWidth, fontSize, 270);
-    expect(rotate).toBe(-270);
+    expect(rotate).toBe(0);
   });
 
-  it("rotation=-90 normalizes to 270 → rotate=-270", () => {
+  it("rotation=-90 normalizes to 270 → rotate=0", () => {
     const { rotate } = getFolioPdfCoords("bottom-center", mediaW, mediaH, textWidth, fontSize, -90);
-    expect(rotate).toBe(-270);
+    expect(rotate).toBe(0);
   });
 
   it("rotation=360 normalizes to 0", () => {
@@ -100,7 +103,7 @@ describe("getFolioPdfCoords with page rotation", () => {
     expect(rotate).toBe(0);
   });
 
-  // Visual position for bottom-center:
+  // Expected visual position for bottom-center:
   //   visualW = (rotation 90 or 270) ? mediaH : mediaW
   //   visualH = (rotation 90 or 270) ? mediaW : mediaH
   //   visualX = (visualW - textWidth) / 2
@@ -115,15 +118,17 @@ describe("getFolioPdfCoords with page rotation", () => {
     };
   }
 
-  // Simulates the viewer's R CCW rotation around MediaBox origin, returning
-  // the visual top-left coords.
+  // Maps a MediaBox point (mx, my) to the visual top-left coordinate space
+  // for a page with the given /Rotate, by simulating the viewer's R CCW
+  // rotation around the MediaBox origin and translating to the visual
+  // viewport's top-left.
   function visualFromMedia(mx: number, my: number, rotation: number) {
     const r = ((rotation % 360) + 360) % 360;
     let vx: number, vy: number;
     switch (r) {
       case 0:
         vx = mx;
-        vy = my;
+        vy = mediaH - my;
         break;
       case 90:
         vx = mediaH - my;
@@ -139,10 +144,9 @@ describe("getFolioPdfCoords with page rotation", () => {
         break;
       default:
         vx = mx;
-        vy = my;
+        vy = mediaH - my;
     }
-    const visualH = r === 90 || r === 270 ? mediaW : mediaH;
-    return { vx, vy: visualH - vy };
+    return { vx, vy };
   }
 
   for (const rotation of [0, 90, 180, 270]) {
@@ -156,17 +160,23 @@ describe("getFolioPdfCoords with page rotation", () => {
   }
 
   for (const rotation of [0, 90, 180, 270]) {
-    it(`rotation=${rotation}: top-left lands at visual (margin, margin)`, () => {
+    it(`rotation=${rotation}: top-left lands at visual (margin, margin + fontSize)`, () => {
       const { x, y } = getFolioPdfCoords("top-left", mediaW, mediaH, textWidth, fontSize, rotation);
+      const actual = visualFromMedia(x, y, rotation);
+      expect(actual.vx).toBeCloseTo(margin, 5);
+      expect(actual.vy).toBeCloseTo(margin + fontSize, 5);
+    });
+  }
+
+  for (const rotation of [0, 90, 180, 270]) {
+    it(`rotation=${rotation}: top-right lands at the visual top-right corner`, () => {
       const r = ((rotation % 360) + 360) % 360;
       const visualW = r === 90 || r === 270 ? mediaH : mediaW;
       const visualH = r === 90 || r === 270 ? mediaW : mediaH;
+      const { x, y } = getFolioPdfCoords("top-right", mediaW, mediaH, textWidth, fontSize, rotation);
       const actual = visualFromMedia(x, y, rotation);
-      expect(actual.vx).toBeCloseTo(margin, 5);
-      // top-left: visual y_top = margin + fontSize (baseline)
+      expect(actual.vx).toBeCloseTo(visualW - textWidth - margin, 5);
       expect(actual.vy).toBeCloseTo(margin + fontSize, 5);
-      void visualW;
-      void visualH;
     });
   }
 });
