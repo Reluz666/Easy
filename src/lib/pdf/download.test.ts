@@ -1,8 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { downloadBlob, suggestFileName } from "./download";
 
 describe("downloadBlob", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -24,6 +29,9 @@ describe("downloadBlob", () => {
     expect(link.href).toBe("blob:fake-url");
     expect(link.download).toBe("out.pdf");
     expect(click).toHaveBeenCalled();
+    // Revoke is deferred so the browser has time to start reading the blob URL
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    vi.runAllTimers();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:fake-url");
   });
 });

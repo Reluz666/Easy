@@ -89,7 +89,7 @@ export default function FoliarPage() {
       if (msg.type === "progress") {
         setProgress({ current: msg.current, total: msg.total });
       } else if (msg.type === "complete") {
-        const blob = new Blob([new Uint8Array(msg.bytes)], { type: "application/pdf" });
+        const blob = new Blob([msg.bytes], { type: "application/pdf" });
         downloadBlob(blob, suggestFileName(state.loaded.fileName, SUFFIX));
         setProcessing(false);
         setProgress(null);

@@ -3,10 +3,15 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
+  link.style.display = "none";
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // Defer cleanup so the browser has time to start reading from the blob URL.
+  // Revoking too early can produce empty/truncated downloads in Chrome and Edge.
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 0);
 }
 
 export type NameSuffix = "foliado" | "comprimido" | "modificado";
