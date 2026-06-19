@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, degrees, type PDFFont } from "pdf-lib";
 import { formatFolio } from "../../lib/format";
 import { getFolioPdfCoords } from "../../lib/foliar/position";
 import type { FolioFont } from "../../lib/foliar/types";
@@ -65,12 +65,14 @@ self.addEventListener("message", async (e: MessageEvent<FoliarRequest>) => {
         const folioNumber = config.range.initialNumber + i;
         const text = formatFolio(config.numberStyle, folioNumber, totalInRange);
         const textWidth = font.widthOfTextAtSize(text, config.fontSize);
-        const { x, y } = getFolioPdfCoords(
+        const { width: mediaW, height: mediaH } = page.getSize();
+        const { x, y, rotate } = getFolioPdfCoords(
           config.position,
-          page.getWidth(),
-          page.getHeight(),
+          mediaW,
+          mediaH,
           textWidth,
-          config.fontSize
+          config.fontSize,
+          page.getRotation().angle
         );
         page.drawText(text, {
           x,
@@ -78,6 +80,7 @@ self.addEventListener("message", async (e: MessageEvent<FoliarRequest>) => {
           size: config.fontSize,
           font,
           color: rgb(color.r, color.g, color.b),
+          rotate: degrees(rotate),
         });
       }
 

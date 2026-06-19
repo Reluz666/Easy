@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, degrees, type PDFFont } from "pdf-lib";
 import { formatFolio } from "../format";
 import { getFolioPdfCoords } from "../foliar/position";
 import type { FoliarConfig, FolioFont } from "../foliar/types";
@@ -56,12 +56,14 @@ export async function applyFolio(
     const folioNumber = initialNumber + i;
     const text = formatFolio(config.numberStyle, folioNumber, totalInRange);
     const textWidth = font.widthOfTextAtSize(text, config.fontSize);
-    const { x, y } = getFolioPdfCoords(
+    const { width: mediaW, height: mediaH } = page.getSize();
+    const { x, y, rotate } = getFolioPdfCoords(
       config.position,
-      page.getWidth(),
-      page.getHeight(),
+      mediaW,
+      mediaH,
       textWidth,
-      config.fontSize
+      config.fontSize,
+      page.getRotation().angle
     );
     page.drawText(text, {
       x,
@@ -69,6 +71,7 @@ export async function applyFolio(
       size: config.fontSize,
       font,
       color: rgb(color.r, color.g, color.b),
+      rotate: degrees(rotate),
     });
   }
 
