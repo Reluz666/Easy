@@ -1,3 +1,7 @@
-// Jest-dom matchers are available via vitest's expect
-// Import this file in tests that need jest-dom matchers:
-// import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
+import { afterEach } from "vitest";
+import { cleanup } from "@testing-library/react";
+
+afterEach(() => {
+  cleanup();
+});
