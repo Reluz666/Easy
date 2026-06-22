@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(bash *)",
-      "Bash(npm create *)",
-      "Bash(yes)"
-    ]
-  }
-}
