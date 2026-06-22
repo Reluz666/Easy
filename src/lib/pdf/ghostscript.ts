@@ -147,7 +147,7 @@ export async function runGhostscript(
     if (/encrypt|password|decrypt/i.test(reason)) {
       throw new Error("El PDF está protegido con contraseña y no se puede procesar.");
     }
-    throw new Error("No se pudo cargar el PDF. El archivo puede estar dañado.");
+    throw new Error("El PDF puede estar dañado o protegido.");
   }
   options?.onProgress?.(10);
 

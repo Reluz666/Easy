@@ -17,7 +17,7 @@ export async function loadPdfFromFile(file: File): Promise<LoadedPdf> {
   try {
     document = await PDFDocument.load(bytes, { ignoreEncryption: false });
   } catch (err) {
-    throw new Error("No se pudo leer el PDF. Verificá que no esté protegido con contraseña ni dañado.");
+    throw new Error("El PDF puede estar dañado o protegido.");
   }
 
   return {

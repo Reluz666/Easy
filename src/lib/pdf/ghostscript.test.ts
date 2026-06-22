@@ -265,7 +265,7 @@ describe("runGhostscript (chunked path for large PDFs)", () => {
 
     await expect(
       runGhostscript(input, "media", { loadGhostscript }),
-    ).rejects.toThrow(/No se pudo cargar/);
+    ).rejects.toThrow(/dañado o protegido/);
 
     // GS should never be invoked if the input can't even be loaded.
     expect(runMock).not.toHaveBeenCalled();

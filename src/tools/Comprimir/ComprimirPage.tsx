@@ -6,6 +6,13 @@ import { downloadBlob, suggestFileName } from "../../lib/pdf/download";
 import LevelSelector, { type LevelDescriptor } from "./LevelSelector";
 import ProgressBar from "./ProgressBar";
 import ResultBar from "./ResultBar";
+import {
+  COMPRESS_TIMEOUT_MS,
+  MAX_COMPRESS_BYTES,
+  formatSizeLimitMessage,
+  formatTimeoutMessage,
+} from "./compress.limits";
+import { logCompressMetric } from "./compress.metrics";
 import type {
   CompressLevel,
   CompressRequest,
@@ -33,6 +40,7 @@ export default function ComprimirPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const workerRef = useRef<Worker | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Register the COI service worker once on mount.
   useEffect(() => {
@@ -41,15 +49,38 @@ export default function ComprimirPage() {
     });
   }, []);
 
-  // Cleanup worker on unmount.
+  // Cleanup worker and pending timeout on unmount.
   useEffect(() => {
     return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       workerRef.current?.terminate();
       workerRef.current = null;
     };
   }, []);
 
+  const clearCompressionTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
   const handleFile = useCallback(async (file: File) => {
+    // Size check FIRST, before allocating the file buffer. Browsers will
+    // happily read 200MB into RAM just to fail a structural check, which
+    // is what makes heavy-PDF cases pathological.
+    if (file.size > MAX_COMPRESS_BYTES) {
+      logCompressMetric({
+        status: "too-large",
+        fileName: file.name,
+        originalSize: file.size,
+        level: "media",
+        timestamp: new Date().toISOString(),
+        error: formatSizeLimitMessage(file.size),
+      });
+      setErrorMessage(formatSizeLimitMessage(file.size));
+      return;
+    }
     try {
       const loaded = await loadPdfFromFile(file);
       const bytes = await loaded.document.save();
@@ -82,8 +113,37 @@ export default function ComprimirPage() {
   }, []);
 
   const handleCompress = useCallback(() => {
+    if (status === "compressing") return;
     if (!fileBytes || !level) return;
     if (workerRef.current) workerRef.current.terminate();
+
+    const startTime = performance.now();
+    const activeLevel = level;
+
+    // Hard timeout: if GS hasn't reported complete by COMPRESS_TIMEOUT_MS,
+    // kill the worker. WASM is browser-cached so the next attempt is cheap.
+    const timeoutId = setTimeout(() => {
+      timeoutRef.current = null;
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      const message = formatTimeoutMessage();
+      const durationMs = performance.now() - startTime;
+      logCompressMetric({
+        status: "timeout",
+        fileName,
+        originalSize,
+        level: activeLevel,
+        durationMs,
+        error: message,
+        timestamp: new Date().toISOString(),
+      });
+      setErrorMessage(message);
+      setStatus("error");
+      setProgress(0);
+    }, COMPRESS_TIMEOUT_MS);
+    timeoutRef.current = timeoutId;
 
     const worker = new CompressWorker();
     workerRef.current = worker;
@@ -94,24 +154,64 @@ export default function ComprimirPage() {
         case "progress":
           setProgress(msg.pct);
           break;
-        case "complete":
+        case "complete": {
+          clearCompressionTimeout();
+          const resultSize = msg.bytes.byteLength;
+          const reductionPct =
+            originalSize > 0
+              ? ((originalSize - resultSize) / originalSize) * 100
+              : 0;
+          logCompressMetric({
+            status: "success",
+            fileName,
+            originalSize,
+            level: activeLevel,
+            durationMs: performance.now() - startTime,
+            resultSize,
+            reductionPct,
+            timestamp: new Date().toISOString(),
+          });
           setResultBytes(msg.bytes);
           setStatus("complete");
           setProgress(100);
           worker.terminate();
           workerRef.current = null;
           break;
-        case "error":
+        }
+        case "error": {
+          clearCompressionTimeout();
+          logCompressMetric({
+            status: "error",
+            fileName,
+            originalSize,
+            level: activeLevel,
+            durationMs: performance.now() - startTime,
+            error: msg.message,
+            timestamp: new Date().toISOString(),
+          });
           setErrorMessage(msg.message);
           setStatus("error");
+          setProgress(0);
           worker.terminate();
           workerRef.current = null;
           break;
+        }
       }
     };
 
     worker.onerror = (e) => {
-      setErrorMessage(e.message || "Error desconocido en el worker.");
+      clearCompressionTimeout();
+      const message = e.message || "Error desconocido en el worker.";
+      logCompressMetric({
+        status: "error",
+        fileName,
+        originalSize,
+        level: activeLevel,
+        durationMs: performance.now() - startTime,
+        error: message,
+        timestamp: new Date().toISOString(),
+      });
+      setErrorMessage(message);
       setStatus("error");
     };
 
@@ -120,19 +220,27 @@ export default function ComprimirPage() {
     setErrorMessage(null);
     setResultBytes(null);
 
-    const request: CompressRequest = { type: "compress", bytes: fileBytes, level };
+    const request: CompressRequest = { type: "compress", bytes: fileBytes, level: activeLevel };
     worker.postMessage(request);
-  }, [fileBytes, level]);
+  }, [fileBytes, level, status, fileName, originalSize, clearCompressionTimeout]);
 
   const handleCancel = useCallback(() => {
     // worker.terminate() kills the GS process mid-run. Any in-flight
     // module.run() is interrupted; the next compression creates a fresh
     // worker (WASM is browser-cached so the cost is small).
+    clearCompressionTimeout();
+    logCompressMetric({
+      status: "cancelled",
+      fileName,
+      originalSize,
+      level: level ?? "media",
+      timestamp: new Date().toISOString(),
+    });
     workerRef.current?.terminate();
     workerRef.current = null;
     setStatus("idle");
     setProgress(0);
-  }, []);
+  }, [fileName, originalSize, level, clearCompressionTimeout]);
 
   const handleDownload = useCallback(() => {
     if (!resultBytes || !fileName) return;
