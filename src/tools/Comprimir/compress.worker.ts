@@ -28,7 +28,10 @@ self.addEventListener("message", async (e: MessageEvent<CompressRequest>) => {
     // into the loader, so we just emit at the boundaries.
     postMessage({ type: "progress", pct: 50 } satisfies CompressResponse);
 
-    const outBytes = await runGhostscript(bytes, level, { loadGhostscript });
+    const outBytes = await runGhostscript(bytes, level, { loadGhostscript }, {
+      onProgress: (pct) =>
+        postMessage({ type: "progress", pct } satisfies CompressResponse),
+    });
 
     if (cancelled) {
       const response: CompressResponse = { type: "cancelled" };
