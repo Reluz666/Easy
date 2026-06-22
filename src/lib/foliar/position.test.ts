@@ -172,7 +172,6 @@ describe("getFolioPdfCoords with page rotation", () => {
     it(`rotation=${rotation}: top-right lands at the visual top-right corner`, () => {
       const r = ((rotation % 360) + 360) % 360;
       const visualW = r === 90 || r === 270 ? mediaH : mediaW;
-      const visualH = r === 90 || r === 270 ? mediaW : mediaH;
       const { x, y } = getFolioPdfCoords("top-right", mediaW, mediaH, textWidth, fontSize, rotation);
       const actual = visualFromMedia(x, y, rotation);
       expect(actual.vx).toBeCloseTo(visualW - textWidth - margin, 5);

@@ -89,7 +89,11 @@ export default function FoliarPage() {
       if (msg.type === "progress") {
         setProgress({ current: msg.current, total: msg.total });
       } else if (msg.type === "complete") {
-        const blob = new Blob([msg.bytes], { type: "application/pdf" });
+        // Copy into a fresh ArrayBuffer: worker may return Uint8Array backed
+        // by SharedArrayBuffer, which BlobPart does not accept directly.
+        const buf = new ArrayBuffer(msg.bytes.byteLength);
+        new Uint8Array(buf).set(msg.bytes);
+        const blob = new Blob([buf], { type: "application/pdf" });
         downloadBlob(blob, suggestFileName(state.loaded.fileName, SUFFIX));
         setProcessing(false);
         setProgress(null);

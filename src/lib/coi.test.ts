@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { registerCoiServiceWorker } from "./coi";
 
 describe("registerCoiServiceWorker", () => {
-  const originalNavigator = global.navigator;
+  const originalNavigator = globalThis.navigator;
 
   beforeEach(() => {
     // Reset any registered flag from a previous test
@@ -10,7 +10,7 @@ describe("registerCoiServiceWorker", () => {
   });
 
   afterEach(() => {
-    Object.defineProperty(global, "navigator", {
+    Object.defineProperty(globalThis, "navigator", {
       value: originalNavigator,
       writable: true,
       configurable: true,
@@ -31,7 +31,7 @@ describe("registerCoiServiceWorker", () => {
       dispatchEvent: vi.fn(),
       onupdatefound: null,
     });
-    Object.defineProperty(global, "navigator", {
+    Object.defineProperty(globalThis, "navigator", {
       value: { serviceWorker: { register: register } },
       writable: true,
       configurable: true,
@@ -42,7 +42,7 @@ describe("registerCoiServiceWorker", () => {
   });
 
   it("does nothing if serviceWorker is unavailable", async () => {
-    Object.defineProperty(global, "navigator", {
+    Object.defineProperty(globalThis, "navigator", {
       value: {},
       writable: true,
       configurable: true,
@@ -52,7 +52,7 @@ describe("registerCoiServiceWorker", () => {
 
   it("does not throw if registration fails", async () => {
     const register = vi.fn().mockRejectedValue(new Error("blocked"));
-    Object.defineProperty(global, "navigator", {
+    Object.defineProperty(globalThis, "navigator", {
       value: { serviceWorker: { register: register } },
       writable: true,
       configurable: true,
