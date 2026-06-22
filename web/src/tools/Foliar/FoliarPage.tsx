@@ -193,7 +193,7 @@ export default function FoliarPage() {
 
   // Page count is unknown client-side without parsing the PDF; we let
   // the backend enforce bounds and surface out-of-range failures via
-  // status=failed + PAGES_FAILED. We *do* validate the range shape so the
+  // status=failed + INVALID_PAGE_RANGE. We *do* validate the range shape so the
   // user gets instant feedback on inverted/missing bounds without an upload.
   const rangeError = useMemo(() => validateFoliateConfig(config, null), [config]);
   const isBusy = status === "uploading" || status === "queued" || status === "processing";

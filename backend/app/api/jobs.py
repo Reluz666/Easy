@@ -33,7 +33,7 @@ from app.core.queue import get_queue
 from app.schemas.errors import ErrorCode, message_for
 from app.schemas.job import JobCreatedResponse, JobInfo, JobOperation, JobStatus
 from app.services import job_store
-from app.services.uploads import save_pdf_upload
+from app.services.uploads import save_extra_pdf_upload, save_pdf_upload
 from app.services.ghostscript import VALID_LEVELS
 
 log = get_logger("api.jobs")
@@ -184,7 +184,7 @@ def create_ocr_job(
 # Error contract:
 #   * 422 — invalid position / range_mode / font_size / initial_number
 #           (Literal + Pydantic constraints reject before the handler runs)
-#   * 400 PAGES_FAILED — range_mode == "from-to" but from_page/to_page
+#   * 400 INVALID_PAGE_RANGE — range_mode == "from-to" but from_page/to_page
 #           are missing, or from_page > to_page. Bounds against the actual
 #           PDF page count happen in the worker and surface as 200 +
 #           status="failed" via GET /api/jobs/{jobId}.
@@ -212,8 +212,8 @@ def create_foliate_job(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "errorCode": ErrorCode.PAGES_FAILED.value,
-                    "message": message_for(ErrorCode.PAGES_FAILED),
+                    "errorCode": ErrorCode.INVALID_PAGE_RANGE.value,
+                    "message": message_for(ErrorCode.INVALID_PAGE_RANGE),
                 },
             )
 
@@ -267,6 +267,103 @@ def create_foliate_job(
         from_page,
         to_page,
         job_timeout=settings.foliate_timeout_seconds + 60,
+        result_ttl=settings.job_ttl_seconds,
+        failure_ttl=settings.job_ttl_seconds,
+    )
+
+    return JobCreatedResponse(jobId=job_id, status="queued")
+
+
+# ---------------------------------------------------------------------------
+# POST /api/jobs/pages
+#
+# Error contract:
+#   * 400 INVALID_OPERATION — malformed ops JSON, or an insert references
+#           `from_pdf: "extra"` but no `extra_file` was uploaded
+#   * 400 FILE_NOT_PDF / FILE_TOO_LARGE — upload validator (main or extra)
+#   * 500 — unexpected error saving files
+#   * 202 — accepted, job enqueued
+#
+# Worker-side failures (INVALID_PAGE_RANGE, INVALID_OPERATION, FILE_CORRUPT,
+# FILE_ENCRYPTED, PAGES_FAILED, INTERNAL) live in the job state and are
+# surfaced via `GET /api/jobs/{jobId}` as status="failed" with errorCode +
+# Spanish errorMessage. The POST body never carries the page-edit outcome.
+# ---------------------------------------------------------------------------
+@router.post(
+    "/pages",
+    response_model=JobCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def create_pages_job(
+    file: UploadFile = File(...),
+    ops: str = Form(...),
+    extra_file: UploadFile | None = File(default=None),
+) -> JobCreatedResponse:
+    # 1) Validate ops shape BEFORE writing any files, so a malformed payload
+    #    never creates an empty job on disk.
+    from app.schemas.pages import parse_ops_json
+
+    try:
+        validated_ops = parse_ops_json(ops)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "errorCode": ErrorCode.INVALID_OPERATION.value,
+                "message": str(exc),
+            },
+        )
+
+    # 2) If any op reads from `extra`, an extra_file upload is mandatory.
+    needs_extra = any(op.get("from_pdf") == "extra" for op in validated_ops)
+    if needs_extra and extra_file is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "errorCode": ErrorCode.INVALID_OPERATION.value,
+                "message": message_for(ErrorCode.INVALID_OPERATION),
+            },
+        )
+
+    settings = get_settings()
+    job_id = new_job_id()
+
+    saved_main = save_pdf_upload(file, job_id)
+    saved_extra = save_extra_pdf_upload(extra_file, job_id) if extra_file is not None else None
+
+    info = job_store.create_job(
+        job_id=job_id,
+        operation=JobOperation.PAGES,
+        input_path=str(saved_main.path),
+        safe_name=saved_main.safe_name,
+        input_bytes=saved_main.size,
+        params={
+            "ops": validated_ops,
+            "has_extra": saved_extra is not None,
+            "extra_path": str(saved_extra.path) if saved_extra else None,
+        },
+    )
+
+    log.info(
+        "api.jobs.pages.created",
+        jobId=job_id,
+        operation="pages",
+        ops_count=len(validated_ops),
+        ops_kinds=[op.get("op") for op in validated_ops],
+        has_extra=saved_extra is not None,
+        input_name=saved_main.safe_name,
+        input_bytes=saved_main.size,
+    )
+
+    from app.tasks.pages import run_pages
+
+    queue = get_queue("pages")
+    queue.enqueue(
+        run_pages,
+        job_id,
+        ops,
+        saved_extra is not None,
+        job_timeout=settings.pages_timeout_seconds + 60,
         result_ttl=settings.job_ttl_seconds,
         failure_ttl=settings.job_ttl_seconds,
     )
@@ -356,7 +453,11 @@ def delete_job(job_id: str) -> Response:
     if info is None:
         # Idempotent: deleting a missing job is not an error.
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    for path_str in (info.input_path, info.output_path):
+    # Pages jobs store the secondary input under params["extra_path"].
+    extra_path_str = None
+    if isinstance(info.params, dict):
+        extra_path_str = info.params.get("extra_path")
+    for path_str in (info.input_path, info.output_path, extra_path_str):
         if not path_str:
             continue
         p = Path(path_str)

@@ -12,11 +12,11 @@ Error contract under test:
   - Non-PDF bytes / wrong content-type -> 400 FILE_NOT_PDF
   - Oversize upload -> 400 FILE_TOO_LARGE
   - range_mode == "from-to" without from/to_page or with from > to
-    -> 400 PAGES_FAILED ("El rango de páginas no es válido.")
+    -> 400 INVALID_PAGE_RANGE ("El rango de páginas no es válido.")
 
 * Asynchronous failures (live in the job state, surfaced by GET):
-  - Worker raises FoliateError(PAGES_FAILED) -> status="failed",
-    errorCode="PAGES_FAILED", Spanish errorMessage
+  - Worker raises FoliateError(INVALID_PAGE_RANGE) -> status="failed",
+    errorCode="INVALID_PAGE_RANGE", Spanish errorMessage
   - Worker raises FoliateError(FOLIATE_FAILED) -> status="failed",
     errorCode="FOLIATE_FAILED", Spanish errorMessage
   - Worker raises FoliateError(FILE_CORRUPT) -> status="failed",
@@ -225,16 +225,16 @@ def test_foliate_endpoint_from_to_without_bounds_returns_400(
     client: TestClient, minimal_pdf_bytes: bytes
 ) -> None:
     """range_mode=from-to with missing bounds is a malformed request —
-    we reject synchronously with PAGES_FAILED rather than enqueuing a job
-    we know will fail."""
+    we reject synchronously with INVALID_PAGE_RANGE rather than enqueuing
+    a job we know will fail."""
     resp = client.post(
         "/api/jobs/foliate",
         files={"file": ("test.pdf", io.BytesIO(minimal_pdf_bytes), "application/pdf")},
         data={"range_mode": "from-to"},
     )
     assert resp.status_code == 400
-    assert resp.json()["detail"]["errorCode"] == "PAGES_FAILED"
-    assert resp.json()["detail"]["message"] == message_for(ErrorCode.PAGES_FAILED)
+    assert resp.json()["detail"]["errorCode"] == "INVALID_PAGE_RANGE"
+    assert resp.json()["detail"]["message"] == message_for(ErrorCode.INVALID_PAGE_RANGE)
 
 
 def test_foliate_endpoint_from_to_with_inverted_bounds_returns_400(
@@ -246,7 +246,7 @@ def test_foliate_endpoint_from_to_with_inverted_bounds_returns_400(
         data={"range_mode": "from-to", "from_page": "5", "to_page": "2"},
     )
     assert resp.status_code == 400
-    assert resp.json()["detail"]["errorCode"] == "PAGES_FAILED"
+    assert resp.json()["detail"]["errorCode"] == "INVALID_PAGE_RANGE"
 
 
 def test_foliate_get_status_returns_job_with_op_foliate(
@@ -281,11 +281,11 @@ def test_foliate_status_reports_pages_failed_when_range_out_of_bounds(
     client: TestClient, minimal_pdf_bytes: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """If from_page > total_pages, the worker writes status=failed with
-    errorCode=PAGES_FAILED. The POST is 202 — async failures are not
+    errorCode=INVALID_PAGE_RANGE. The POST is 202 — async failures are not
     surfaced via the POST body, only via GET /api/jobs/{jobId}."""
 
     def fake_foliate(input_path, output_path, params):
-        raise FoliateError(ErrorCode.PAGES_FAILED, "El rango de páginas no es válido.")
+        raise FoliateError(ErrorCode.INVALID_PAGE_RANGE, "El rango de páginas no es válido.")
 
     monkeypatch.setattr("app.tasks.foliate.foliate_service.foliate_pdf", fake_foliate)
 
@@ -301,8 +301,8 @@ def test_foliate_status_reports_pages_failed_when_range_out_of_bounds(
     job_id = resp.json()["jobId"]
     info = client.get(f"/api/jobs/{job_id}").json()
     assert info["status"] == "failed"
-    assert info["error_code"] == ErrorCode.PAGES_FAILED.value
-    assert info["error_message"] == message_for(ErrorCode.PAGES_FAILED)
+    assert info["error_code"] == ErrorCode.INVALID_PAGE_RANGE.value
+    assert info["error_message"] == message_for(ErrorCode.INVALID_PAGE_RANGE)
 
 
 def test_foliate_status_reports_foliate_failed(

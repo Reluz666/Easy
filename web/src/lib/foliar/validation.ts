@@ -8,7 +8,7 @@ import { FOLIO_FONT_SIZE_MAX, FOLIO_FONT_SIZE_MIN } from "./types";
  * when the config is valid for a document of `totalPages` pages.
  *
  * The shape check (from_page <= to_page when both present) is duplicated
- * on the backend and rejected synchronously with PAGES_FAILED — these
+ * on the backend and rejected synchronously with INVALID_PAGE_RANGE — these
  * validators are the client's first line of defense so users see the
  * error before the upload starts.
  */

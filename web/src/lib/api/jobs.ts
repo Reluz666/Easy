@@ -19,6 +19,52 @@ export type FoliatePosition =
 
 export type FoliateRangeMode = "all" | "from-to";
 
+/**
+ * Page-edit operations.
+ *
+ * Mirror of `backend/app/schemas/pages.py` (Pydantic discriminated union on
+ * `op`). All page numbers are **1-indexed** and reference the *current*
+ * state of the main PDF at the time the op runs — i.e. ops are applied
+ * sequentially and earlier ops can change what later page numbers refer to.
+ *
+ * The backend re-validates these against the actual document on the worker
+ * side; the frontend only needs to match the shape.
+ */
+export type PagesDeleteOp = {
+  op: "delete";
+  /** 1-indexed page numbers to remove from the main PDF. */
+  pages: number[];
+};
+
+export type PagesInsertOp = {
+  op: "insert";
+  /**
+   * 1-indexed position in the current main PDF *after* which the new
+   * pages are inserted. `0` prepends; pass the current page count to
+   * append.
+   */
+  after_page: number;
+  /** Source PDF for the inserted pages. `"extra"` requires `extraFile`. */
+  from_pdf: "main" | "extra";
+  /** 1-indexed page numbers within the source PDF. */
+  pages: number[];
+};
+
+export type PagesRotateOp = {
+  op: "rotate";
+  pages: number[];
+  /** Rotation applied cumulatively on top of any existing /Rotate. */
+  degrees: 90 | 180 | 270;
+};
+
+export type PagesReorderOp = {
+  op: "reorder";
+  /** Permutation of 1..N where N is the current main PDF page count. */
+  order: number[];
+};
+
+export type PagesOp = PagesDeleteOp | PagesInsertOp | PagesRotateOp | PagesReorderOp;
+
 export type JobStatus = "queued" | "processing" | "done" | "failed";
 
 export type JobInfo = {
@@ -36,6 +82,9 @@ export type JobInfo = {
     range_mode?: FoliateRangeMode;
     from_page?: number | null;
     to_page?: number | null;
+    ops?: PagesOp[];
+    has_extra?: boolean;
+    extra_path?: string | null;
     safe_name?: string;
     [k: string]: unknown;
   };
@@ -175,7 +224,7 @@ export async function createOcrJob(
  * Same async error contract as `createOcrJob`: this call only surfaces
  * synchronous validation errors (invalid position/range_mode, file is not
  * a PDF, file too large, missing/inverted from-to bounds). Worker-side
- * failures (PAGES_FAILED out of bounds, FOLIATE_FAILED, FILE_CORRUPT,
+ * failures (INVALID_PAGE_RANGE out of bounds, FOLIATE_FAILED, FILE_CORRUPT,
  * FILE_ENCRYPTED) are NOT in the POST response — they're written to the
  * job state in Redis. The caller must poll `getJob` to read the eventual
  * outcome.
@@ -204,6 +253,52 @@ export async function createFoliateJob(
   if (params.to_page !== null) fd.append("to_page", String(params.to_page));
 
   const resp = await fetch("/api/jobs/foliate", {
+    method: "POST",
+    body: fd,
+    signal,
+  });
+  if (!resp.ok) {
+    const err = await readJsonError(resp);
+    throw new JobApiError(resp.status, err.errorCode, err.message);
+  }
+  const body = (await resp.json()) as JobCreatedResponse;
+  return body.jobId;
+}
+
+/**
+ * Upload a PDF (plus an optional secondary PDF) and create a page-edit job.
+ * Returns the API-level jobId.
+ *
+ * `ops` is a list of page-level operations applied **in order** to the main
+ * PDF — see the `PagesOp` union for the supported shapes. All page numbers
+ * are 1-indexed and reference the current state of the document at the
+ * time the op runs (so a `delete [4]` followed by `rotate [4]` on a 5-page
+ * doc means "rotate the page that *was* 5"). The backend serializes the
+ * ops as JSON in the multipart `ops` field.
+ *
+ * `extraFile` is required iff any op has `from_pdf: "extra"`; the backend
+ * returns a 400 INVALID_OPERATION if it's missing.
+ *
+ * Same async error contract as the other create* helpers: synchronous
+ * errors (malformed ops, missing extra, file is not a PDF, file too large)
+ * come back via this call; worker-side failures (INVALID_PAGE_RANGE out of
+ * bounds, FILE_CORRUPT, FILE_ENCRYPTED, PAGES_FAILED) are written to the
+ * job state in Redis. The caller must poll `getJob` to read the outcome.
+ */
+export async function createPagesJob(
+  file: File,
+  ops: PagesOp[],
+  extraFile?: File | null,
+  signal?: AbortSignal,
+): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  fd.append("ops", JSON.stringify(ops));
+  if (extraFile) {
+    fd.append("extra_file", extraFile, extraFile.name);
+  }
+
+  const resp = await fetch("/api/jobs/pages", {
     method: "POST",
     body: fd,
     signal,

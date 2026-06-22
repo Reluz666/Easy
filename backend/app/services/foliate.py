@@ -69,15 +69,15 @@ class FoliateParams:
 def _resolve_pages(params: FoliateParams, total: int) -> tuple[int, int]:
     """Translate (range_mode, from, to) into concrete 1-indexed [from, to].
 
-    Raises FoliateError(PAGES_FAILED) when the range is malformed OR out
-    of bounds for the actual document — callers don't need to know which.
+    Raises FoliateError(INVALID_PAGE_RANGE) when the range is malformed OR
+    out of bounds for the actual document — callers don't need to know which.
     """
     if params.range_mode == "all":
         return 1, total
     f, t = params.from_page, params.to_page
     if f is None or t is None or f < 1 or t < f or t > total:
         raise FoliateError(
-            ErrorCode.PAGES_FAILED,
+            ErrorCode.INVALID_PAGE_RANGE,
             "El rango de páginas no es válido.",
         )
     return f, t
@@ -139,7 +139,7 @@ def foliate_pdf(
         )
     if params.initial_number < 1:
         raise FoliateError(
-            ErrorCode.PAGES_FAILED,
+            ErrorCode.INVALID_PAGE_RANGE,
             "El número inicial debe ser mayor o igual a 1.",
         )
 

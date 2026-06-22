@@ -13,6 +13,8 @@ class ErrorCode(str, Enum):
     OCR_FAILED = "OCR_FAILED"
     FOLIATE_FAILED = "FOLIATE_FAILED"
     PAGES_FAILED = "PAGES_FAILED"
+    INVALID_PAGE_RANGE = "INVALID_PAGE_RANGE"
+    INVALID_OPERATION = "INVALID_OPERATION"
     JOB_NOT_FOUND = "JOB_NOT_FOUND"
     INTERNAL = "INTERNAL"
 
@@ -42,7 +44,9 @@ def message_for(code: ErrorCode, **kwargs: object) -> str:
         ),
         ErrorCode.OCR_FAILED: "No se pudo aplicar OCR al PDF.",
         ErrorCode.FOLIATE_FAILED: "No se pudo foliar el PDF.",
-        ErrorCode.PAGES_FAILED: "El rango de páginas no es válido.",
+        ErrorCode.PAGES_FAILED: "No se pudo editar las páginas del PDF.",
+        ErrorCode.INVALID_PAGE_RANGE: "El rango de páginas no es válido.",
+        ErrorCode.INVALID_OPERATION: "La operación solicitada no es válida.",
         ErrorCode.JOB_NOT_FOUND: (
             "No encontramos el trabajo. Puede haber expirado (TTL {ttl_h} h)."
         ),

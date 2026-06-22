@@ -39,19 +39,41 @@ class SavedUpload:
 
 
 def save_pdf_upload(file: UploadFile, job_id: str) -> SavedUpload:
-    """Stream `file` to `<data>/jobs/<job_id>/input.pdf` after validation.
+    """Stream `file` to `<inputs>/<job_id>/input.pdf` after validation.
 
     Raises `HTTPException` (400) on validation failures. The caller catches
     nothing — these errors are user-facing.
     """
+    return _stream_pdf(file, job_id, settings_dir=get_settings().inputs_dir, filename="input.pdf")
+
+
+def save_extra_pdf_upload(file: UploadFile, job_id: str) -> SavedUpload:
+    """Stream the secondary PDF to `<extra-inputs>/<job_id>/extra.pdf`.
+
+    Used by `/api/jobs/pages` for the `from_pdf: "extra"` insert op. Same
+    validation as the main upload, but the file lands in a separate
+    directory so the worker reads it via a different path.
+    """
+    return _stream_pdf(file, job_id, settings_dir=get_settings().extra_inputs_dir, filename="extra.pdf")
+
+
+def _stream_pdf(
+    file: UploadFile,
+    job_id: str,
+    *,
+    settings_dir: Path,
+    filename: str,
+) -> SavedUpload:
+    """Shared chunked-writer used by save_*_upload.
+
+    Writes to `<settings_dir>/<job_id>/<filename>`, enforcing the same
+    PDF magic + size cap as the public helpers.
+    """
     settings = get_settings()
-    settings.inputs_dir.mkdir(parents=True, exist_ok=True)
-    job_dir = settings.inputs_dir / job_id
+    settings_dir.mkdir(parents=True, exist_ok=True)
+    job_dir = settings_dir / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    # Reject obviously-wrong content types early. Browsers always send one
-    # for `multipart/form-data`; some clients don't, so this is a hint,
-    # not the final word (magic bytes below are authoritative).
     if file.content_type and file.content_type not in ("application/pdf", "application/octet-stream"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -71,7 +93,7 @@ def save_pdf_upload(file: UploadFile, job_id: str) -> SavedUpload:
             },
         )
 
-    target = job_dir / "input.pdf"
+    target = job_dir / filename
     total = 0
     magic_checked = False
     with target.open("wb") as fout:
@@ -108,7 +130,6 @@ def save_pdf_upload(file: UploadFile, job_id: str) -> SavedUpload:
             fout.write(chunk)
 
     if not magic_checked:
-        # File was empty.
         target.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

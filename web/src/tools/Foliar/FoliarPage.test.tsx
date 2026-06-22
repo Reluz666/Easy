@@ -221,7 +221,7 @@ describe("FoliarPage submission", () => {
         progress: 0,
         output_path: null,
         output_bytes: null,
-        error_code: "PAGES_FAILED",
+        error_code: "INVALID_PAGE_RANGE",
         error_message: "El rango de páginas no es válido.",
       }),
     );
@@ -234,7 +234,7 @@ describe("FoliarPage submission", () => {
     expect(alert.textContent).toMatch(/El rango de páginas no es válido/);
   });
 
-  it("shows PAGES_FAILED for an out-of-bounds range that the backend detected", async () => {
+  it("shows INVALID_PAGE_RANGE for an out-of-bounds range that the backend detected", async () => {
     const user = userEvent.setup();
     vi.mocked(createFoliateJob).mockResolvedValue("job-oob");
     vi.mocked(getJob).mockResolvedValue(

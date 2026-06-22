@@ -29,6 +29,8 @@ dist-ssr
 .superpowers/
 .backup-init/
 temp-init/
+# Local Claude settings (per-developer, not project-wide)
+.claude/settings.local.json
 
 # Python
 __pycache__/

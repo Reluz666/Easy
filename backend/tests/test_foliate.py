@@ -85,7 +85,7 @@ def test_foliate_pdf_rejects_zero_initial_number(tmp_path: Path) -> None:
     out = tmp_path / "out.pdf"
     with pytest.raises(FoliateError) as exc:
         foliate_pdf(inp, out, FoliateParams(initial_number=0))
-    assert exc.value.error_code == ErrorCode.PAGES_FAILED
+    assert exc.value.error_code == ErrorCode.INVALID_PAGE_RANGE
 
 
 def test_foliate_pdf_writes_valid_pdf_for_all_pages(
@@ -185,7 +185,7 @@ def test_foliate_pdf_rejects_from_to_above_total(tmp_path: Path) -> None:
             out,
             FoliateParams(range_mode="from-to", from_page=1, to_page=99),
         )
-    assert exc.value.error_code == ErrorCode.PAGES_FAILED
+    assert exc.value.error_code == ErrorCode.INVALID_PAGE_RANGE
 
 
 def test_foliate_pdf_rejects_from_to_with_inverted_bounds(tmp_path: Path) -> None:
@@ -198,7 +198,7 @@ def test_foliate_pdf_rejects_from_to_with_inverted_bounds(tmp_path: Path) -> Non
             out,
             FoliateParams(range_mode="from-to", from_page=3, to_page=2),
         )
-    assert exc.value.error_code == ErrorCode.PAGES_FAILED
+    assert exc.value.error_code == ErrorCode.INVALID_PAGE_RANGE
 
 
 def test_foliate_pdf_rejects_from_to_with_missing_bounds(tmp_path: Path) -> None:
@@ -211,7 +211,7 @@ def test_foliate_pdf_rejects_from_to_with_missing_bounds(tmp_path: Path) -> None
             out,
             FoliateParams(range_mode="from-to", from_page=None, to_page=2),
         )
-    assert exc.value.error_code == ErrorCode.PAGES_FAILED
+    assert exc.value.error_code == ErrorCode.INVALID_PAGE_RANGE
 
 
 def test_foliate_pdf_rejects_corrupt_pdf(tmp_path: Path) -> None:

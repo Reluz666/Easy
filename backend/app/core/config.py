@@ -56,6 +56,13 @@ class Settings(BaseSettings):
         return self.data_dir / "outputs"
 
     @property
+    def extra_inputs_dir(self) -> Path:
+        # Files uploaded as "secondary" inputs (e.g. the extra PDF for the
+        # page-editing insert op) live here so they share the job-data
+        # volume with the main input/output but don't collide with it.
+        return self.data_dir / "extra-inputs"
+
+    @property
     def work_dir(self) -> Path:
         return self.data_dir / "work"
 
