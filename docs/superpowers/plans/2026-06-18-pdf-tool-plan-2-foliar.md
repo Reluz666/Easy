@@ -51,7 +51,7 @@ src/tools/Foliar/
 **Files:**
 - Create: `src/lib/foliar/types.ts`
 
-- [ ] **Step 1: Create `src/lib/foliar/types.ts`**
+- [x] **Step 1: Create `src/lib/foliar/types.ts`**
 
 ```ts
 export type FolioPosition =
@@ -129,7 +129,7 @@ export const FOLIO_FONT_SIZE_MAX = 72;
 export const FOLIO_MARGIN_PT = 24; // distance from page edge to folio text
 ```
 
-- [ ] **Step 2: Verify type check**
+- [x] **Step 2: Verify type check**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npx tsc --noEmit
@@ -137,7 +137,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npx tsc --noEmit
 
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/lib/foliar/types.ts && git commit -m "feat(foliar): add FoliarConfig types and defaults"
@@ -153,7 +153,7 @@ The 9-position matrix maps a position string to PDF coordinates for `page.drawTe
 - Create: `src/lib/foliar/position.ts`
 - Create: `src/lib/foliar/position.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/lib/foliar/position.test.ts`:
 
@@ -224,7 +224,7 @@ describe("getFolioPdfCoords", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/foliar/position.test.ts
@@ -232,7 +232,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/foliar/posi
 
 Expected: FAIL with "Cannot find module './position'".
 
-- [ ] **Step 3: Implement `src/lib/foliar/position.ts`**
+- [x] **Step 3: Implement `src/lib/foliar/position.ts`**
 
 ```ts
 import { FOLIO_MARGIN_PT } from "./types";
@@ -264,7 +264,7 @@ export function getFolioPdfCoords(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/foliar/position.test.ts
@@ -272,7 +272,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/foliar/posi
 
 Expected: PASS with 9 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/lib/foliar/position.ts src/lib/foliar/position.test.ts && git commit -m "feat(foliar): add position-to-PDF-coords helper with TDD"
@@ -291,7 +291,7 @@ Validates the foliado range. Rules (from design spec):
 - Create: `src/lib/foliar/validation.ts`
 - Create: `src/lib/foliar/validation.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/lib/foliar/validation.test.ts`:
 
@@ -344,7 +344,7 @@ describe("validateFolioRange", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/foliar/validation.test.ts
@@ -352,7 +352,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/foliar/vali
 
 Expected: FAIL with "Cannot find module './validation'".
 
-- [ ] **Step 3: Implement `src/lib/foliar/validation.ts`**
+- [x] **Step 3: Implement `src/lib/foliar/validation.ts`**
 
 ```ts
 import type { FoliarConfig } from "./types";
@@ -374,7 +374,7 @@ export function validateFolioRange(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/foliar/validation.test.ts
@@ -382,7 +382,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/foliar/vali
 
 Expected: PASS with 8 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/lib/foliar/validation.ts src/lib/foliar/validation.test.ts && git commit -m "feat(foliar): add range validation with TDD"
@@ -400,7 +400,7 @@ Note: pdf-lib's `StandardFonts` includes Helvetica, TimesRoman, Courier — but 
 - Create: `src/lib/pdf/applyFolio.ts`
 - Create: `src/lib/pdf/applyFolio.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/lib/pdf/applyFolio.test.ts`:
 
@@ -462,7 +462,7 @@ describe("applyFolio", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/pdf/applyFolio.test.ts
@@ -470,7 +470,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/pdf/applyFo
 
 Expected: FAIL with "Cannot find module './applyFolio'".
 
-- [ ] **Step 3: Implement `src/lib/pdf/applyFolio.ts`**
+- [x] **Step 3: Implement `src/lib/pdf/applyFolio.ts`**
 
 ```ts
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
@@ -541,7 +541,7 @@ export async function applyFolio(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/pdf/applyFolio.test.ts
@@ -549,7 +549,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run src/lib/pdf/applyFo
 
 Expected: PASS with 5 tests.
 
-- [ ] **Step 5: Verify type check + run all tests**
+- [x] **Step 5: Verify type check + run all tests**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npx tsc --noEmit
@@ -563,7 +563,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run
 
 Expected: all tests pass (existing 15 + 9 position + 8 validation + 5 applyFolio = 37).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/lib/pdf/applyFolio.ts src/lib/pdf/applyFolio.test.ts && git commit -m "feat(foliar): add applyFolio to apply foliado config to PDF with TDD"
@@ -578,7 +578,7 @@ Defines the message protocol between the main thread and the worker. Lives in a 
 **Files:**
 - Create: `src/tools/Foliar/foliar.protocol.ts`
 
-- [ ] **Step 1: Create `src/tools/Foliar/foliar.protocol.ts`**
+- [x] **Step 1: Create `src/tools/Foliar/foliar.protocol.ts`**
 
 ```ts
 import type { FoliarConfig } from "../../lib/foliar/types";
@@ -601,7 +601,7 @@ export type ErrorMessage = { type: "error"; message: string };
 export type FoliarResponse = ProgressMessage | CompleteMessage | CancelledMessage | ErrorMessage;
 ```
 
-- [ ] **Step 2: Verify type check**
+- [x] **Step 2: Verify type check**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npx tsc --noEmit
@@ -609,7 +609,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npx tsc --noEmit
 
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/tools/Foliar/foliar.protocol.ts && git commit -m "feat(foliar): add shared worker protocol types"
@@ -624,7 +624,7 @@ The worker receives a `process` message with the file bytes and config. It proce
 **Files:**
 - Create: `src/tools/Foliar/foliar.worker.ts`
 
-- [ ] **Step 1: Create `src/tools/Foliar/foliar.worker.ts`**
+- [x] **Step 1: Create `src/tools/Foliar/foliar.worker.ts`**
 
 ```ts
 /// <reference lib="webworker" />
@@ -722,7 +722,7 @@ self.addEventListener("message", async (e: MessageEvent<FoliarRequest>) => {
 });
 ```
 
-- [ ] **Step 2: Verify type check + build**
+- [x] **Step 2: Verify type check + build**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npx tsc --noEmit
@@ -736,7 +736,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
 
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/tools/Foliar/foliar.worker.ts && git commit -m "feat(foliar): add Web Worker for batch folio processing with cancel"
@@ -751,7 +751,7 @@ Shows the uploaded file's name, size, and page count, with a "Cambiar archivo" b
 **Files:**
 - Create: `src/tools/Foliar/FileBar.tsx`
 
-- [ ] **Step 1: Create `src/tools/Foliar/FileBar.tsx`**
+- [x] **Step 1: Create `src/tools/Foliar/FileBar.tsx`**
 
 ```tsx
 type FileBarProps = {
@@ -795,7 +795,7 @@ export default function FileBar({ fileName, fileSize, pageCount, onChangeFile }:
 }
 ```
 
-- [ ] **Step 2: Verify build**
+- [x] **Step 2: Verify build**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
@@ -803,7 +803,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
 
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/tools/Foliar/FileBar.tsx && git commit -m "feat(foliar): add FileBar component"
@@ -826,7 +826,7 @@ Component is fully controlled: `config` and `onChange` props. The page is owned 
 **Files:**
 - Create: `src/tools/Foliar/FoliarConfig.tsx`
 
-- [ ] **Step 1: Create `src/tools/Foliar/FoliarConfig.tsx`**
+- [x] **Step 1: Create `src/tools/Foliar/FoliarConfig.tsx`**
 
 ```tsx
 import {
@@ -1061,7 +1061,7 @@ export default function FoliarConfigPanel({ config, totalPages, rangeError, onCh
 }
 ```
 
-- [ ] **Step 2: Verify build**
+- [x] **Step 2: Verify build**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
@@ -1069,7 +1069,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
 
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/tools/Foliar/FoliarConfig.tsx && git commit -m "feat(foliar): add FoliarConfig panel with all 6 control groups"
@@ -1084,7 +1084,7 @@ Renders the current page of the PDF as a canvas with the folio text overlaid on 
 **Files:**
 - Create: `src/tools/Foliar/FoliarPreview.tsx`
 
-- [ ] **Step 1: Create `src/tools/Foliar/FoliarPreview.tsx`**
+- [x] **Step 1: Create `src/tools/Foliar/FoliarPreview.tsx`**
 
 ```tsx
 import { useEffect, useRef, useState } from "react";
@@ -1250,7 +1250,7 @@ export default function FoliarPreview({
 }
 ```
 
-- [ ] **Step 2: Verify build**
+- [x] **Step 2: Verify build**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
@@ -1258,7 +1258,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
 
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/tools/Foliar/FoliarPreview.tsx && git commit -m "feat(foliar): add live FoliarPreview with canvas and page navigation"
@@ -1273,7 +1273,7 @@ Top-level page component. Owns the state for: file, pageCount, currentPage, conf
 **Files:**
 - Create: `src/tools/Foliar/FoliarPage.tsx`
 
-- [ ] **Step 1: Create `src/tools/Foliar/FoliarPage.tsx`**
+- [x] **Step 1: Create `src/tools/Foliar/FoliarPage.tsx`**
 
 ```tsx
 import { useEffect, useRef, useState } from "react";
@@ -1495,7 +1495,7 @@ export default function FoliarPage() {
 }
 ```
 
-- [ ] **Step 2: Verify type check + build**
+- [x] **Step 2: Verify type check + build**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npx tsc --noEmit
@@ -1509,7 +1509,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
 
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/tools/Foliar/FoliarPage.tsx && git commit -m "feat(foliar): add FoliarPage orchestrator with worker, state, and progress"
@@ -1524,13 +1524,13 @@ Update `src/tools/Foliar.tsx` to render the new `FoliarPage` component.
 **Files:**
 - Modify: `src/tools/Foliar.tsx` (replace stub with delegation)
 
-- [ ] **Step 1: Read the current file**
+- [x] **Step 1: Read the current file**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && cat src/tools/Foliar.tsx
 ```
 
-- [ ] **Step 2: Replace the file**
+- [x] **Step 2: Replace the file**
 
 Replace the entire contents of `src/tools/Foliar.tsx` with:
 
@@ -1542,7 +1542,7 @@ export default function Foliar() {
 }
 ```
 
-- [ ] **Step 3: Verify build**
+- [x] **Step 3: Verify build**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
@@ -1550,7 +1550,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
 
 Expected: build succeeds.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/tools/Foliar.tsx && git commit -m "refactor(foliar): delegate Foliar route to FoliarPage"
@@ -1562,7 +1562,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && git add src/tools/Foliar.tsx && git c
 
 Run the full test suite, build, and start the dev server to do a visual smoke test.
 
-- [ ] **Step 1: Run all tests**
+- [x] **Step 1: Run all tests**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run
@@ -1570,7 +1570,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm test -- --run
 
 Expected: all tests pass (existing 15 + 9 position + 8 validation + 5 applyFolio = 37).
 
-- [ ] **Step 2: Run the build**
+- [x] **Step 2: Run the build**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
@@ -1578,7 +1578,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run build
 
 Expected: build succeeds, no errors.
 
-- [ ] **Step 3: Start the dev server**
+- [x] **Step 3: Start the dev server**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run dev
@@ -1586,7 +1586,7 @@ cd "D:/Archivos de la U/PROYECTOS/Easy" && npm run dev
 
 Wait for the server to be ready. Then:
 
-- [ ] **Step 4: Visual smoke test**
+- [x] **Step 4: Visual smoke test**
 
 Visit `http://localhost:5173/foliar` and verify:
 - Foliar page loads (no console errors).
@@ -1602,7 +1602,7 @@ Visit `http://localhost:5173/foliar` and verify:
 - "Generar PDF foliado" button triggers the worker; progress bar shows; result downloads as `<original>-foliado.pdf`.
 - Cancel button works during processing.
 
-- [ ] **Step 5: Commit final empty commit**
+- [x] **Step 5: Commit final empty commit**
 
 ```bash
 cd "D:/Archivos de la U/PROYECTOS/Easy" && git commit --allow-empty -m "chore: plan 2 complete - foliar tool with live preview and worker" && git rev-parse HEAD
