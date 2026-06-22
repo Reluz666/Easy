@@ -7,12 +7,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# Editors / OS
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -28,3 +29,31 @@ dist-ssr
 .superpowers/
 .backup-init/
 temp-init/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.venv/
+venv/
+
+# Local env files (keep .env.example tracked)
+.env
+.env.*
+!.env.example
+
+# Docker volumes on the host (data lives inside the named volumes)
+data/
+
+# Per-developer overrides
+docker-compose.override.yml
+
+# Vite cache (created by `vite` in dev mode, recreated on each run)
+.vite/

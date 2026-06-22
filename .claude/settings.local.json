@@ -79,7 +79,26 @@
       "Bash(/bin/rm -f src/lib/pdf/debug.test.ts)",
       "Bash(cmd //c \"del src\\\\lib\\\\pdf\\\\debug.test.ts\")",
       "Bash(node *)",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(grep -n \"require\\(\\\\\"fs\\\\\"\\)\\\\|require\\('fs'\\)\\\\|require\\(\\\\\"path\\\\\"\\)\\\\|require\\(\\\\\"crypto\\\\\"\\)\\\\|require\\(\\\\\"module\\\\\"\\)\\\\|import.*from.*['\\\\\"]\\\\\\\\\\(fs\\\\\\\\|path\\\\\\\\|crypto\\\\\\\\|module\\\\\\\\\\)['\\\\\"]\" \"node_modules/@jspawn/ghostscript-wasm/gs.js\")",
+      "Bash(grep -o \"new Function\\\\|Function\\(.\\\\{0,30\\\\}\\\\|locateFile\" \"dist/assets/compress.worker-DywE0uno.js\")",
+      "Bash(ls -la /tmp/*.pdf)",
+      "Read(//c/Users/JESUS ALEJANDRO/Desktop/**)",
+      "Read(//c/Users/JESUS ALEJANDRO/Downloads/**)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git restore *)",
+      "Bash(git mv *)",
+      "Bash(cmd.exe /c \"robocopy \\\\\"D:\\\\Archivos de la U\\\\PROYECTOS\\\\Easy\\\\src\\\\\" \\\\\"D:\\\\Archivos de la U\\\\PROYECTOS\\\\Easy\\\\web\\\\src\\\\\" /E /MOVE /NFL /NDL /NJH /NJS /NC /NS /NP\")",
+      "Bash(cmd.exe *)",
+      "Bash(MSYS_NO_PATHCONV=1 robocopy \"D:/Archivos de la U/PROYECTOS/Easy/src\" \"D:/Archivos de la U/PROYECTOS/Easy/web/src\" /E /MOVE /NFL /NDL /NJH /NJS /NC /NS /NP)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(powershell *)",
+      "Bash(grep -E '\\(\\\\.ps1$|^\\\\.|^web$|^docs$|^src$|^public$|^node_modules$|^index|^package|^vite|^tsconfig|^tailwind|^postcss|^eslint|^vitest|^README|^dist$\\)')",
+      "Bash(grep -E \"\\(\\\\.ps1$|\\\\.move\\)\")",
+      "Bash(docker compose *)",
+      "Bash(docker --version)",
+      "Bash(python -c \"import ast, sys; [ast.parse\\(open\\(f, encoding='utf-8'\\).read\\(\\), f\\) for f in __import__\\('pathlib'\\).Path\\('app'\\).rglob\\('*.py'\\)]; print\\('all python files parse OK'\\)\")"
     ]
   }
 }

@@ -1,0 +1,170 @@
+services:
+  # =========================================================================
+  # Redis 7 — broker for RQ, also stores job state.
+  # =========================================================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "6379:6379"
+
+  # =========================================================================
+  # FastAPI — receives uploads, enqueues jobs, streams downloads.
+  # =========================================================================
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: easy-backend:latest
+    restart: unless-stopped
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-104857600}
+      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-120}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-900}
+      FOLIATE_TIMEOUT_SECONDS: ${FOLIATE_TIMEOUT_SECONDS:-60}
+      PAGES_TIMEOUT_SECONDS: ${PAGES_TIMEOUT_SECONDS:-60}
+      JOB_TTL_SECONDS: ${JOB_TTL_SECONDS:-86400}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - job-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/live', timeout=2).status==204 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # =========================================================================
+  # Workers — one process per service. To scale horizontally, add another
+  # service block with a different container_name (don't use deploy.replicas:
+  # it's a Swarm-only directive and silently ignored by `docker compose up`).
+  # =========================================================================
+
+  worker-compress-1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: easy-backend:latest
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker.entrypoint"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      WORKER_NAME: worker-compress-1
+      WORKER_QUEUES: compress
+      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-120}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - job-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  worker-compress-2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: easy-backend:latest
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker.entrypoint"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      WORKER_NAME: worker-compress-2
+      WORKER_QUEUES: compress
+      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-120}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - job-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  worker-ocr:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: easy-backend:latest
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker.entrypoint"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      WORKER_NAME: worker-ocr
+      WORKER_QUEUES: ocr
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-900}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - job-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  worker-foliate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: easy-backend:latest
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker.entrypoint"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      WORKER_NAME: worker-foliate
+      WORKER_QUEUES: foliate
+      FOLIATE_TIMEOUT_SECONDS: ${FOLIATE_TIMEOUT_SECONDS:-60}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - job-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  worker-pages:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: easy-backend:latest
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker.entrypoint"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      WORKER_NAME: worker-pages
+      WORKER_QUEUES: pages
+      PAGES_TIMEOUT_SECONDS: ${PAGES_TIMEOUT_SECONDS:-60}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - job-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+volumes:
+  redis-data:
+  job-data:

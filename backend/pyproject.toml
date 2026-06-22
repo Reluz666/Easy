@@ -1,0 +1,13 @@
+[project]
+name = "easy-pdf-backend"
+version = "0.1.0"
+description = "Backend for Easy PDF — compress, OCR, foliate, edit pages"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
