@@ -40,7 +40,7 @@ def message_for(code: ErrorCode, **kwargs: object) -> str:
         ErrorCode.OCR_TIMEOUT: (
             "El OCR tardó demasiado. El PDF puede tener imágenes muy grandes."
         ),
-        ErrorCode.OCR_FAILED: "No se pudo aplicar OCR al PDF. ({detail})",
+        ErrorCode.OCR_FAILED: "No se pudo aplicar OCR al PDF.",
         ErrorCode.FOLIATE_FAILED: "No se pudo foliar el PDF.",
         ErrorCode.PAGES_FAILED: (
             "La operación de páginas no es válida. Verificá los números de página."

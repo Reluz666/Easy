@@ -43,6 +43,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 # Bound the level parameter via Literal[...]; FastAPI rejects anything else
 # with 422 before the handler runs.
 CompressLevel = Literal["baja", "media", "alta"]
+OcrLang = Literal["spa+eng", "spa", "eng"]
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +100,72 @@ def create_compress_job(
         job_id,
         level,
         job_timeout=settings.gs_timeout_seconds + 60,
+        result_ttl=settings.job_ttl_seconds,
+        failure_ttl=settings.job_ttl_seconds,
+    )
+
+    return JobCreatedResponse(jobId=job_id, status="queued")
+
+
+# ---------------------------------------------------------------------------
+# POST /api/jobs/ocr
+#
+# Error contract:
+#   * 422 — invalid language (Literal validation)
+#   * 400 — file is not a PDF or exceeds max size (upload validator)
+#   * 500 — unexpected error saving the file
+#   * 202 — accepted, job enqueued
+#
+# Worker-side failures (OCR_TIMEOUT, OCR_FAILED, empty output, raw
+# ocrmypdf non-zero exit) live in the job state and are surfaced via
+# `GET /api/jobs/{jobId}` as status="failed" with errorCode + Spanish
+# errorMessage. The POST body never carries the OCR outcome.
+# ---------------------------------------------------------------------------
+@router.post(
+    "/ocr",
+    response_model=JobCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def create_ocr_job(
+    file: UploadFile = File(...),
+    lang: OcrLang = Form(default="spa+eng"),
+) -> JobCreatedResponse:
+    settings = get_settings()
+    job_id = new_job_id()
+
+    saved = save_pdf_upload(file, job_id)
+
+    info = job_store.create_job(
+        job_id=job_id,
+        operation=JobOperation.OCR,
+        input_path=str(saved.path),
+        safe_name=saved.safe_name,
+        input_bytes=saved.size,
+        params={"lang": lang},
+    )
+
+    log.info(
+        "api.jobs.ocr.created",
+        jobId=job_id,
+        operation="ocr",
+        lang=lang,
+        input_name=saved.safe_name,
+        input_bytes=saved.size,
+        max_upload_bytes=settings.max_upload_bytes,
+    )
+
+    from app.tasks.ocr import run_ocr
+
+    queue = get_queue("ocr")
+    # Same RQ headroom pattern as compress: OCR_TIMEOUT_SECONDS is the
+    # deadline we enforce inside the service; RQ's own job_timeout must
+    # exceed it so the cleanup + state write completes even if the
+    # service is at the edge of its budget.
+    queue.enqueue(
+        run_ocr,
+        job_id,
+        lang,
+        job_timeout=settings.ocr_timeout_seconds + 60,
         result_ttl=settings.job_ttl_seconds,
         failure_ttl=settings.job_ttl_seconds,
     )

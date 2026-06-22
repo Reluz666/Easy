@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import UploadArea from "../../components/UploadArea";
 import LevelSelector, { type LevelDescriptor } from "./LevelSelector";
@@ -8,6 +8,7 @@ import {
   type CompressLevel,
   type JobInfo,
   createCompressJob,
+  createOcrJob,
   deleteJob,
   describeApiError,
   downloadJobResult,
@@ -27,6 +28,26 @@ const LEVELS: readonly LevelDescriptor[] = [
 // rejected server-side anyway.
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
+type Mode = "compress" | "ocr";
+
+const MODE_OPTIONS: ReadonlyArray<{
+  id: Mode;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "compress",
+    label: "PDF normal",
+    description: "Comprime imágenes y objetos con Ghostscript.",
+  },
+  {
+    id: "ocr",
+    label: "PDF escaneado: OCR + optimización",
+    description:
+      "Agrega texto buscable y optimiza imágenes del PDF escaneado.",
+  },
+];
+
 type Status =
   | "idle"
   | "uploading"
@@ -36,6 +57,7 @@ type Status =
   | "error";
 
 export default function ComprimirPage() {
+  const [mode, setMode] = useState<Mode>("compress");
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [originalSize, setOriginalSize] = useState<number>(0);
@@ -59,6 +81,16 @@ export default function ComprimirPage() {
       if (jid) void deleteJob(jid);
     };
   }, []);
+
+  // Switching mode resets progress + selected level so the user always
+  // confirms their choice per mode.
+  useEffect(() => {
+    setLevel(null);
+    setStatus("idle");
+    setProgress(0);
+    setErrorMessage(null);
+    setJobInfo(null);
+  }, [mode]);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -117,31 +149,56 @@ export default function ComprimirPage() {
           stopPolling();
           setStatus("complete");
           setProgress(100);
-          logCompressMetric({
-            status: "success",
-            fileName,
-            originalSize,
-            level: level ?? "media",
-            durationMs: info.duration_ms ?? undefined,
-            resultSize: info.output_bytes ?? undefined,
-            reductionPct: info.reduction_pct ?? undefined,
-            timestamp: new Date().toISOString(),
-          });
+          if (mode === "ocr") {
+            logCompressMetric({
+              status: "ocr-success",
+              fileName,
+              originalSize,
+              lang: "spa+eng",
+              durationMs: info.duration_ms ?? undefined,
+              resultSize: info.output_bytes ?? undefined,
+              reductionPct: info.reduction_pct ?? undefined,
+              timestamp: new Date().toISOString(),
+            });
+          } else {
+            logCompressMetric({
+              status: "success",
+              fileName,
+              originalSize,
+              level: level ?? "media",
+              durationMs: info.duration_ms ?? undefined,
+              resultSize: info.output_bytes ?? undefined,
+              reductionPct: info.reduction_pct ?? undefined,
+              timestamp: new Date().toISOString(),
+            });
+          }
         } else if (info.status === "failed") {
           stopPolling();
           setStatus("error");
           const backendMsg =
             info.error_message ??
             "El servidor rechazó el archivo o falló durante el procesamiento.";
-          logCompressMetric({
-            status: "error",
-            fileName,
-            originalSize,
-            level: level ?? "media",
-            durationMs: info.duration_ms ?? undefined,
-            error: `${info.error_code ?? "UNKNOWN"}: ${backendMsg}`,
-            timestamp: new Date().toISOString(),
-          });
+          if (mode === "ocr") {
+            logCompressMetric({
+              status: "ocr-failed",
+              fileName,
+              originalSize,
+              lang: "spa+eng",
+              durationMs: info.duration_ms ?? undefined,
+              error: `${info.error_code ?? "UNKNOWN"}: ${backendMsg}`,
+              timestamp: new Date().toISOString(),
+            });
+          } else {
+            logCompressMetric({
+              status: "error",
+              fileName,
+              originalSize,
+              level: level ?? "media",
+              durationMs: info.duration_ms ?? undefined,
+              error: `${info.error_code ?? "UNKNOWN"}: ${backendMsg}`,
+              timestamp: new Date().toISOString(),
+            });
+          }
           setErrorMessage(backendMsg);
         } else if (info.status === "queued") {
           setStatus("queued");
@@ -156,10 +213,11 @@ export default function ComprimirPage() {
         stopPolling();
         const message = describeApiError(err);
         logCompressMetric({
-          status: "error",
+          status: mode === "ocr" ? "ocr-failed" : "error",
           fileName,
           originalSize,
-          level: level ?? "media",
+          lang: mode === "ocr" ? "spa+eng" : undefined,
+          level: mode === "compress" ? level ?? "media" : undefined,
           error: message,
           timestamp: new Date().toISOString(),
         });
@@ -167,11 +225,12 @@ export default function ComprimirPage() {
         setStatus("error");
       }
     },
-    [fileName, originalSize, level, stopPolling],
+    [fileName, originalSize, level, mode, stopPolling],
   );
 
-  const handleCompress = useCallback(async () => {
-    if (!file || !level) return;
+  const handleSubmit = useCallback(async () => {
+    if (!file) return;
+    if (mode === "compress" && !level) return;
     if (status !== "idle" && status !== "complete" && status !== "error") return;
 
     cancelledRef.current = false;
@@ -183,14 +242,18 @@ export default function ComprimirPage() {
     const startTime = performance.now();
     let jobId: string;
     try {
-      jobId = await createCompressJob(file, level);
+      jobId =
+        mode === "compress"
+          ? await createCompressJob(file, level as CompressLevel)
+          : await createOcrJob(file, "spa+eng");
     } catch (err) {
       const message = describeApiError(err);
       logCompressMetric({
-        status: "error",
+        status: mode === "ocr" ? "ocr-failed" : "error",
         fileName,
         originalSize,
-        level,
+        lang: mode === "ocr" ? "spa+eng" : undefined,
+        level: mode === "compress" ? level ?? "media" : undefined,
         durationMs: performance.now() - startTime,
         error: message,
         timestamp: new Date().toISOString(),
@@ -201,10 +264,8 @@ export default function ComprimirPage() {
     }
 
     currentJobIdRef.current = jobId;
-    // Move straight to the queued/processing poll loop — the upload itself
-    // has already completed at this point.
     await pollOnce(jobId);
-  }, [file, level, status, fileName, originalSize, pollOnce]);
+  }, [file, level, mode, status, fileName, originalSize, pollOnce]);
 
   const handleCancel = useCallback(() => {
     cancelledRef.current = true;
@@ -217,11 +278,12 @@ export default function ComprimirPage() {
       fileName,
       originalSize,
       level: level ?? "media",
+      lang: mode === "ocr" ? "spa+eng" : undefined,
       timestamp: new Date().toISOString(),
     });
     setStatus("idle");
     setProgress(0);
-  }, [fileName, originalSize, level, stopPolling]);
+  }, [fileName, originalSize, level, mode, stopPolling]);
 
   const handleDownload = useCallback(async () => {
     const jid = currentJobIdRef.current;
@@ -245,21 +307,81 @@ export default function ComprimirPage() {
   const isBusy =
     status === "uploading" || status === "queued" || status === "processing";
 
-  const statusLabel: Record<Status, string> = {
-    idle: "Listo para comprimir.",
-    uploading: "Subiendo archivo…",
-    queued: "En cola, esperando un worker libre…",
-    processing: "Procesando en el servidor…",
-    complete: "Listo.",
-    error: "Ocurrió un error.",
-  };
+  const statusLabel = useMemo<Record<Status, string>>(() => {
+    if (mode === "ocr") {
+      return {
+        idle: "Listo para aplicar OCR.",
+        uploading: "Subiendo PDF…",
+        queued: "En cola para OCR…",
+        processing: "Aplicando OCR y optimización…",
+        complete: "OCR finalizado. El PDF ahora puede incluir texto buscable.",
+        error: "Ocurrió un error.",
+      };
+    }
+    return {
+      idle: "Listo para comprimir.",
+      uploading: "Subiendo archivo…",
+      queued: "En cola, esperando un worker libre…",
+      processing: "Procesando en el servidor…",
+      complete: "Listo.",
+      error: "Ocurrió un error.",
+    };
+  }, [mode]);
+
+  // OCR can grow the file (text layer outweighs image savings). When that
+  // happens, surface an explicit "creció un X%" note above the result bar
+  // so the user understands the size comparison in ResultBar.
+  const ocrGrewNote = (() => {
+    if (mode !== "ocr") return null;
+    if (status !== "complete") return null;
+    if (!jobInfo || jobInfo.reduction_pct === null || jobInfo.reduction_pct === undefined) return null;
+    if (jobInfo.reduction_pct >= 0) return null;
+    const grewPct = Math.abs(jobInfo.reduction_pct).toFixed(1);
+    return `El PDF creció un ${grewPct}% (el OCR agregó una capa de texto). Eso es esperable en archivos ya optimizados: ahora el documento es buscable.`;
+  })();
 
   return (
     <Layout>
       <h1 className="text-2xl font-semibold text-text mb-2">Comprimir</h1>
       <p className="text-text-muted mb-4">
-        Reducí el tamaño de un PDF eligiendo un nivel de compresión.
+        Reducí el tamaño de un PDF o aplicá OCR a un PDF escaneado.
       </p>
+
+      <section aria-labelledby="mode-heading" className="flex flex-col gap-3 mb-6">
+        <h2 id="mode-heading" className="text-lg font-medium text-text">
+          Modo
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {MODE_OPTIONS.map((opt) => {
+            const selected = opt.id === mode;
+            return (
+              <label
+                key={opt.id}
+                className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                  selected
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-surface hover:border-primary/50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="mode"
+                  value={opt.id}
+                  checked={selected}
+                  onChange={() => setMode(opt.id)}
+                  disabled={isBusy}
+                  className="mt-1"
+                  data-testid={`mode-${opt.id}`}
+                />
+                <div>
+                  <div className="font-medium text-text">{opt.label}</div>
+                  <div className="text-sm text-text-muted">{opt.description}</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </section>
 
       {!file ? (
         <UploadArea onFileSelected={handleFile} />
@@ -280,17 +402,41 @@ export default function ComprimirPage() {
             </button>
           </div>
 
-          <section aria-labelledby="level-heading" className="flex flex-col gap-3">
-            <h2 id="level-heading" className="text-lg font-medium text-text">
-              Nivel de compresión
-            </h2>
-            <LevelSelector
-              levels={LEVELS}
-              value={level}
-              onChange={(id) => setLevel(id as CompressLevel)}
-              disabled={isBusy}
-            />
-          </section>
+          {mode === "compress" ? (
+            <section aria-labelledby="level-heading" className="flex flex-col gap-3">
+              <h2 id="level-heading" className="text-lg font-medium text-text">
+                Nivel de compresión
+              </h2>
+              <LevelSelector
+                levels={LEVELS}
+                value={level}
+                onChange={(id) => setLevel(id as CompressLevel)}
+                disabled={isBusy}
+              />
+            </section>
+          ) : (
+            <section aria-labelledby="ocr-info-heading" className="flex flex-col gap-3">
+              <h2 id="ocr-info-heading" className="text-lg font-medium text-text">
+                Acerca de esta opción
+              </h2>
+              <div
+                className="p-4 bg-surface border border-border rounded-lg text-sm text-text-muted"
+                data-testid="ocr-info-note"
+              >
+                Esta opción agrega texto buscable al PDF escaneado y puede
+                optimizar imágenes. No siempre reduce el tamaño del archivo;
+                en algunos casos puede aumentar ligeramente.
+              </div>
+              <div
+                className="p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-900"
+                data-testid="ocr-signature-warning"
+              >
+                <strong>Importante:</strong> si el PDF tiene firma digital, el
+                proceso OCR puede invalidarla. No uses esta opción si necesitás
+                conservar la validez de la firma.
+              </div>
+            </section>
+          )}
 
           {errorMessage && (
             <p role="alert" className="text-red-600 text-sm">
@@ -315,21 +461,46 @@ export default function ComprimirPage() {
           )}
 
           {status === "complete" && jobInfo && (
-            <ResultBar
-              originalBytes={originalSize}
-              resultBytes={jobInfo.output_bytes ?? 0}
-              onDownload={handleDownload}
-            />
+            <div className="flex flex-col gap-3">
+              {mode === "ocr" && (
+                <div
+                  className="p-3 bg-green-50 border border-green-300 rounded-lg text-sm text-green-900"
+                  data-testid="ocr-success-banner"
+                >
+                  {statusLabel.complete}
+                </div>
+              )}
+              {ocrGrewNote && (
+                <div
+                  className="p-3 bg-blue-50 border border-blue-300 rounded-lg text-sm text-blue-900"
+                  data-testid="ocr-grew-note"
+                >
+                  {ocrGrewNote}
+                </div>
+              )}
+              <ResultBar
+                originalBytes={originalSize}
+                resultBytes={jobInfo.output_bytes ?? 0}
+                onDownload={handleDownload}
+              />
+            </div>
           )}
 
           {(status === "idle" || status === "complete" || status === "error") && (
             <button
               type="button"
-              onClick={handleCompress}
-              disabled={!level || !file}
+              onClick={handleSubmit}
+              disabled={!file || (mode === "compress" && !level)}
+              data-testid="submit-button"
               className="self-start px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {status === "complete" ? "Comprimir de nuevo" : "Comprimir y descargar"}
+              {mode === "ocr"
+                ? status === "complete"
+                  ? "Aplicar OCR de nuevo"
+                  : "Aplicar OCR y descargar"
+                : status === "complete"
+                  ? "Comprimir de nuevo"
+                  : "Comprimir y descargar"}
             </button>
           )}
         </div>

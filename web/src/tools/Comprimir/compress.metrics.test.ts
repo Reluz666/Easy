@@ -66,4 +66,45 @@ describe("logCompressMetric", () => {
       }),
     ).not.toThrow();
   });
+
+  it("logs OCR success metrics with the same [compress] tag prefix", () => {
+    logCompressMetric({
+      status: "ocr-success",
+      fileName: "scan.pdf",
+      originalSize: 17_000_000,
+      lang: "spa+eng",
+      durationMs: 459_000,
+      resultSize: 17_500_000,
+      // OCR grew the file — reduction_pct is negative.
+      reductionPct: -2.9,
+      timestamp: "2026-06-22T11:00:00.000Z",
+    });
+
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const [tag, payload] = logSpy.mock.calls[0];
+    expect(tag).toBe("[compress]");
+    expect(payload).toMatchObject({
+      status: "ocr-success",
+      fileName: "scan.pdf",
+      lang: "spa+eng",
+      reductionPct: -2.9,
+    });
+  });
+
+  it("logs OCR failed metrics with the error message", () => {
+    logCompressMetric({
+      status: "ocr-failed",
+      fileName: "scan.pdf",
+      originalSize: 17_000_000,
+      lang: "spa+eng",
+      durationMs: 900_000,
+      error: "OCR_TIMEOUT: El OCR tardó demasiado. El PDF puede tener imágenes muy grandes.",
+      timestamp: "2026-06-22T11:05:00.000Z",
+    });
+
+    expect(logSpy.mock.calls[0][1]).toMatchObject({
+      status: "ocr-failed",
+      error: expect.stringContaining("OCR_TIMEOUT"),
+    });
+  });
 });

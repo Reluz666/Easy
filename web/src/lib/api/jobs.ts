@@ -7,6 +7,8 @@
 
 export type CompressLevel = "baja" | "media" | "alta";
 
+export type OcrLang = "spa+eng" | "spa" | "eng";
+
 export type JobStatus = "queued" | "processing" | "done" | "failed";
 
 export type JobInfo = {
@@ -14,7 +16,12 @@ export type JobInfo = {
   op: string;
   status: JobStatus;
   progress: number;
-  params: { level?: CompressLevel; safe_name?: string; [k: string]: unknown };
+  params: {
+    level?: CompressLevel;
+    lang?: OcrLang;
+    safe_name?: string;
+    [k: string]: unknown;
+  };
   input_path: string;
   output_path: string | null;
   error_code: string | null;
@@ -101,6 +108,38 @@ export async function createCompressJob(
   fd.append("level", level);
 
   const resp = await fetch("/api/jobs/compress", {
+    method: "POST",
+    body: fd,
+    signal,
+  });
+  if (!resp.ok) {
+    const err = await readJsonError(resp);
+    throw new JobApiError(resp.status, err.errorCode, err.message);
+  }
+  const body = (await resp.json()) as JobCreatedResponse;
+  return body.jobId;
+}
+
+/**
+ * Upload a scanned PDF and create an OCR job. Returns the API-level jobId.
+ *
+ * Note on error semantics: this call only surfaces synchronous validation
+ * errors (invalid language, file is not a PDF, file too large, unexpected
+ * save failure). Worker-side failures (OCR_TIMEOUT, OCR_FAILED, empty
+ * output) are NOT in the POST response — they're written to the job
+ * state in Redis. The caller must poll `getJob` to read the eventual
+ * outcome.
+ */
+export async function createOcrJob(
+  file: File,
+  lang: OcrLang,
+  signal?: AbortSignal,
+): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  fd.append("lang", lang);
+
+  const resp = await fetch("/api/jobs/ocr", {
     method: "POST",
     body: fd,
     signal,

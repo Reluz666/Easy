@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         tesseract-ocr-spa \
         qpdf \
         unpaper \
+        pngquant \
         build-essential \
         libffi-dev \
         libxml2-dev \
