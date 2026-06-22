@@ -137,16 +137,25 @@ export async function runGhostscript(
     });
     pageCount = sourceDoc.getPageCount();
     const repaired = await sourceDoc.save({ useObjectStreams: false });
-    if (repaired.byteLength > 0) {
-      workingBytes = repaired;
+    if (repaired.byteLength === 0) {
+      throw new Error("No se pudo reparar el PDF (el archivo resultante está vacío).");
     }
-  } catch {
-    throw new Error(
-      "No se pudo cargar el PDF. Verifica que no esté protegido con contraseña.",
-    );
+    workingBytes = repaired;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    if (/No se pudo reparar/.test(reason)) throw err;
+    if (/encrypt|password|decrypt/i.test(reason)) {
+      throw new Error("El PDF está protegido con contraseña y no se puede procesar.");
+    }
+    throw new Error("No se pudo cargar el PDF. El archivo puede estar dañado.");
   }
   options?.onProgress?.(10);
 
+  // Each chunk size restarts from page 1: simpler than tracking the last
+  // successful page across sizes, but wastes work on pages that already
+  // compressed cleanly at the previous size. Acceptable because OOMs
+  // typically happen on the first or second chunk of a size.
+  let maxReportedPct = 10;
   for (const chunkSize of CHUNK_PAGE_SIZES) {
     try {
       const merged = await runChunked({
@@ -155,7 +164,11 @@ export async function runGhostscript(
         baseArgs,
         pageCount,
         chunkSize,
-        onProgress: (pct) => options?.onProgress?.(10 + pct * 0.9),
+        onProgress: (pct) => {
+          const clamped = Math.max(10 + pct * 0.9, maxReportedPct);
+          maxReportedPct = clamped;
+          options?.onProgress?.(clamped);
+        },
       });
       options?.onProgress?.(100);
       return merged;
@@ -172,8 +185,8 @@ export async function runGhostscript(
   );
 }
 
-function isOom(reason: string): boolean {
-  return /cannot enlarge memory|out of memory/i.test(reason);
+export function isOom(reason: string): boolean {
+  return /Cannot enlarge memory/i.test(reason);
 }
 
 function friendlyError(reason: string): Error {

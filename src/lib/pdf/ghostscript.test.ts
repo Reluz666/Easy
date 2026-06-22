@@ -1,5 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { levelToGsArgs, runGhostscript } from "./ghostscript";
+import { isOom, levelToGsArgs, runGhostscript } from "./ghostscript";
+
+describe("isOom", () => {
+  it("matches the Emscripten 'Cannot enlarge memory' abort message", () => {
+    expect(isOom("Aborted(Cannot enlarge memory, asked to go up to 2688102400 bytes)")).toBe(true);
+  });
+
+  it("is case-insensitive on the abort phrase", () => {
+    expect(isOom("cannot ENLARGE memory")).toBe(true);
+  });
+
+  it("does not match generic 'out of memory' from other sources", () => {
+    expect(isOom("Out of memory — cannot allocate font descriptor")).toBe(false);
+  });
+
+  it("does not match Spanish OOM messages", () => {
+    expect(isOom("Memoria agotada durante el procesamiento")).toBe(false);
+  });
+
+  it("does not match empty or unrelated strings", () => {
+    expect(isOom("")).toBe(false);
+    expect(isOom("gs exited with code 1")).toBe(false);
+  });
+});
 
 describe("levelToGsArgs", () => {
   it("maps 'baja' to /printer with 150 dpi image downsampling", () => {
@@ -246,5 +269,51 @@ describe("runGhostscript (chunked path for large PDFs)", () => {
 
     // GS should never be invoked if the input can't even be loaded.
     expect(runMock).not.toHaveBeenCalled();
+  });
+
+  it("gives a password-specific message for encrypted PDFs", async () => {
+    const input = new Uint8Array(SIX_MB);
+    vi.mocked(PDFDocument.load).mockReset();
+    vi.mocked(PDFDocument.load).mockRejectedValue(
+      new Error("PDF is encrypted, password required"),
+    );
+
+    const runMock = vi.fn().mockResolvedValue(new Uint8Array([1]));
+    const loadGhostscript = vi.fn().mockResolvedValue({ run: runMock });
+
+    await expect(
+      runGhostscript(input, "media", { loadGhostscript }),
+    ).rejects.toThrow(/protegido con contraseña/);
+  });
+
+  it("propagates non-OOM errors from runChunked without retrying smaller sizes", async () => {
+    const input = new Uint8Array(SIX_MB);
+    const sourceDoc = {
+      getPageCount: () => 25,
+      save: vi.fn().mockResolvedValue(new Uint8Array([99])),
+    };
+    const chunkDoc = { getPageIndices: () => [0] };
+    const merged = {
+      copyPages: vi.fn().mockResolvedValue([{ page: 0 }]),
+      addPage: vi.fn(),
+      save: vi.fn().mockResolvedValue(new Uint8Array([42])),
+    };
+
+    vi.mocked(PDFDocument.load)
+      .mockResolvedValueOnce(sourceDoc as never)
+      .mockResolvedValue(chunkDoc as never);
+    vi.mocked(PDFDocument.create).mockResolvedValue(merged as never);
+
+    // Non-OOM error (e.g. invalid argument). Should propagate immediately,
+    // not retry with smaller chunk sizes.
+    const runMock = vi.fn().mockRejectedValue(new Error("gs exited with code 2"));
+    const loadGhostscript = vi.fn().mockResolvedValue({ run: runMock });
+
+    await expect(
+      runGhostscript(input, "alta", { loadGhostscript }),
+    ).rejects.toThrow(/No se pudo comprimir/);
+
+    // Only the first chunk of the first chunk size was attempted.
+    expect(runMock.mock.calls.length).toBe(1);
   });
 });

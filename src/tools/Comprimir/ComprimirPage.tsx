@@ -101,12 +101,6 @@ export default function ComprimirPage() {
           worker.terminate();
           workerRef.current = null;
           break;
-        case "cancelled":
-          setStatus("idle");
-          setProgress(0);
-          worker.terminate();
-          workerRef.current = null;
-          break;
         case "error":
           setErrorMessage(msg.message);
           setStatus("error");
@@ -129,6 +123,16 @@ export default function ComprimirPage() {
     const request: CompressRequest = { type: "compress", bytes: fileBytes, level };
     worker.postMessage(request);
   }, [fileBytes, level]);
+
+  const handleCancel = useCallback(() => {
+    // worker.terminate() kills the GS process mid-run. Any in-flight
+    // module.run() is interrupted; the next compression creates a fresh
+    // worker (WASM is browser-cached so the cost is small).
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    setStatus("idle");
+    setProgress(0);
+  }, []);
 
   const handleDownload = useCallback(() => {
     if (!resultBytes || !fileName) return;
@@ -189,7 +193,18 @@ export default function ComprimirPage() {
             </p>
           )}
 
-          {isCompressing && <ProgressBar pct={progress} />}
+          {isCompressing && (
+            <div className="flex flex-col gap-2">
+              <ProgressBar pct={progress} />
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="self-start text-sm px-3 py-1 border border-border rounded hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
 
           {status === "complete" && resultBytes && (
             <ResultBar
