@@ -57,3 +57,18 @@ docker-compose.override.yml
 
 # Vite cache (created by `vite` in dev mode, recreated on each run)
 .vite/
+
+# User test artifacts (drop-in CV / smoke-test outputs / screenshots
+# the user keeps at the repo root for manual end-to-end tests). Keeping
+# these out of the index protects against accidental commits; the user
+# decides whether to delete or move them.
+CV UNIDO SIN OFICIO.pdf
+CV UNIDO SIN OFICIO-comprimido.pdf
+Captura de pantalla *.png
+# Generic patterns for ad-hoc smoke-test PDFs and screenshots at the repo
+# root (e.g. things dragged in for a manual run and forgotten).
+/*.pdf
+/*.PDF
+/Captura*.png
+/Screenshot*.png
+/screen*.png
