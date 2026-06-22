@@ -1,25 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import UploadArea from "../../components/UploadArea";
-import { loadPdfFromFile } from "../../lib/pdf/load";
-import { downloadBlob, suggestFileName } from "../../lib/pdf/download";
 import LevelSelector, { type LevelDescriptor } from "./LevelSelector";
 import ProgressBar from "./ProgressBar";
 import ResultBar from "./ResultBar";
 import {
-  COMPRESS_TIMEOUT_MS,
-  MAX_COMPRESS_BYTES,
-  formatSizeLimitMessage,
-  formatTimeoutMessage,
-} from "./compress.limits";
+  type CompressLevel,
+  type JobInfo,
+  createCompressJob,
+  deleteJob,
+  describeApiError,
+  downloadJobResult,
+  getJob,
+} from "../../lib/api/jobs";
+import { formatBytes } from "../../lib/format";
 import { logCompressMetric } from "./compress.metrics";
-import type {
-  CompressLevel,
-  CompressRequest,
-  CompressResponse,
-} from "./compress.protocol";
-// Vite's ?worker syntax: imports the worker as a constructor.
-import CompressWorker from "./compress.worker.ts?worker";
 
 const LEVELS: readonly LevelDescriptor[] = [
   { id: "baja", label: "Baja", description: "Casi sin pérdida visible (~10-20% menos)" },
@@ -27,208 +22,196 @@ const LEVELS: readonly LevelDescriptor[] = [
   { id: "alta", label: "Alta", description: "Máxima reducción (~70-85% menos)" },
 ];
 
-type Status = "idle" | "compressing" | "complete" | "error";
+// 100 MB hard cap matches the backend. We mirror it client-side so users
+// get an instant error instead of waiting for an upload that will be
+// rejected server-side anyway.
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+
+type Status =
+  | "idle"
+  | "uploading"
+  | "queued"
+  | "processing"
+  | "complete"
+  | "error";
 
 export default function ComprimirPage() {
-  const [fileBytes, setFileBytes] = useState<Uint8Array | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [originalSize, setOriginalSize] = useState<number>(0);
   const [level, setLevel] = useState<CompressLevel | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState<number>(0);
-  const [resultBytes, setResultBytes] = useState<Uint8Array | null>(null);
+  const [jobInfo, setJobInfo] = useState<JobInfo | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const workerRef = useRef<Worker | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentJobIdRef = useRef<string | null>(null);
+  // Tracks whether the user (or unmount) cancelled the in-flight job so we
+  // can ignore late `done` polls that finish after the user moved on.
+  const cancelledRef = useRef<boolean>(false);
 
-  // Register the COI service worker once on mount.
-  useEffect(() => {
-    import("../../lib/coi").then(({ registerCoiServiceWorker }) => {
-      registerCoiServiceWorker();
-    });
-  }, []);
-
-  // Cleanup worker and pending timeout on unmount.
+  // Clean up the polling loop and best-effort delete the job on unmount.
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      workerRef.current?.terminate();
-      workerRef.current = null;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      const jid = currentJobIdRef.current;
+      if (jid) void deleteJob(jid);
     };
   }, []);
 
-  const clearCompressionTimeout = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
     }
   }, []);
 
-  const handleFile = useCallback(async (file: File) => {
-    // Size check FIRST, before allocating the file buffer. Browsers will
-    // happily read 200MB into RAM just to fail a structural check, which
-    // is what makes heavy-PDF cases pathological.
-    if (file.size > MAX_COMPRESS_BYTES) {
-      logCompressMetric({
-        status: "too-large",
-        fileName: file.name,
-        originalSize: file.size,
-        level: "media",
-        timestamp: new Date().toISOString(),
-        error: formatSizeLimitMessage(file.size),
-      });
-      setErrorMessage(formatSizeLimitMessage(file.size));
-      return;
-    }
-    try {
-      const loaded = await loadPdfFromFile(file);
-      const bytes = await loaded.document.save();
-      setFileBytes(bytes);
-      setFileName(loaded.fileName);
-      setOriginalSize(loaded.fileSize);
-      setLevel(null);
-      setStatus("idle");
-      setResultBytes(null);
-      setErrorMessage(null);
-      setProgress(0);
-    } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "No se pudo leer el PDF.",
-      );
-    }
-  }, []);
-
-  const handleClearFile = useCallback(() => {
-    setFileBytes(null);
+  const resetAll = useCallback(() => {
+    setFile(null);
     setFileName("");
     setOriginalSize(0);
     setLevel(null);
     setStatus("idle");
-    setResultBytes(null);
-    setErrorMessage(null);
     setProgress(0);
-    workerRef.current?.terminate();
-    workerRef.current = null;
+    setJobInfo(null);
+    setErrorMessage(null);
   }, []);
 
-  const handleCompress = useCallback(() => {
-    if (status === "compressing") return;
-    if (!fileBytes || !level) return;
-    if (workerRef.current) workerRef.current.terminate();
+  const handleFile = useCallback((selected: File) => {
+    setErrorMessage(null);
+    if (selected.size > MAX_UPLOAD_BYTES) {
+      const mb = (selected.size / 1024 / 1024).toFixed(1);
+      setErrorMessage(
+        `Este PDF es demasiado pesado (${mb} MB). El máximo permitido es ${(MAX_UPLOAD_BYTES / 1024 / 1024).toFixed(0)} MB.`,
+      );
+      return;
+    }
+    setFile(selected);
+    setFileName(selected.name);
+    setOriginalSize(selected.size);
+    setLevel(null);
+    setStatus("idle");
+    setProgress(0);
+    setJobInfo(null);
+    setErrorMessage(null);
+  }, []);
 
-    const startTime = performance.now();
-    const activeLevel = level;
+  const handleClearFile = useCallback(() => {
+    stopPolling();
+    const jid = currentJobIdRef.current;
+    currentJobIdRef.current = null;
+    cancelledRef.current = false;
+    if (jid) void deleteJob(jid);
+    resetAll();
+  }, [stopPolling, resetAll]);
 
-    // Hard timeout: if GS hasn't reported complete by COMPRESS_TIMEOUT_MS,
-    // kill the worker. WASM is browser-cached so the next attempt is cheap.
-    const timeoutId = setTimeout(() => {
-      timeoutRef.current = null;
-      if (workerRef.current) {
-        workerRef.current.terminate();
-        workerRef.current = null;
-      }
-      const message = formatTimeoutMessage();
-      const durationMs = performance.now() - startTime;
-      logCompressMetric({
-        status: "timeout",
-        fileName,
-        originalSize,
-        level: activeLevel,
-        durationMs,
-        error: message,
-        timestamp: new Date().toISOString(),
-      });
-      setErrorMessage(message);
-      setStatus("error");
-      setProgress(0);
-    }, COMPRESS_TIMEOUT_MS);
-    timeoutRef.current = timeoutId;
-
-    const worker = new CompressWorker();
-    workerRef.current = worker;
-
-    worker.onmessage = (e: MessageEvent<CompressResponse>) => {
-      const msg = e.data;
-      switch (msg.type) {
-        case "progress":
-          setProgress(msg.pct);
-          break;
-        case "complete": {
-          clearCompressionTimeout();
-          const resultSize = msg.bytes.byteLength;
-          const reductionPct =
-            originalSize > 0
-              ? ((originalSize - resultSize) / originalSize) * 100
-              : 0;
+  const pollOnce = useCallback(
+    async (jobId: string) => {
+      try {
+        const info = await getJob(jobId);
+        if (cancelledRef.current) return;
+        setJobInfo(info);
+        setProgress(info.progress);
+        if (info.status === "done") {
+          stopPolling();
+          setStatus("complete");
+          setProgress(100);
           logCompressMetric({
             status: "success",
             fileName,
             originalSize,
-            level: activeLevel,
-            durationMs: performance.now() - startTime,
-            resultSize,
-            reductionPct,
+            level: level ?? "media",
+            durationMs: info.duration_ms ?? undefined,
+            resultSize: info.output_bytes ?? undefined,
+            reductionPct: info.reduction_pct ?? undefined,
             timestamp: new Date().toISOString(),
           });
-          setResultBytes(msg.bytes);
-          setStatus("complete");
-          setProgress(100);
-          worker.terminate();
-          workerRef.current = null;
-          break;
-        }
-        case "error": {
-          clearCompressionTimeout();
+        } else if (info.status === "failed") {
+          stopPolling();
+          setStatus("error");
+          const backendMsg =
+            info.error_message ??
+            "El servidor rechazó el archivo o falló durante el procesamiento.";
           logCompressMetric({
             status: "error",
             fileName,
             originalSize,
-            level: activeLevel,
-            durationMs: performance.now() - startTime,
-            error: msg.message,
+            level: level ?? "media",
+            durationMs: info.duration_ms ?? undefined,
+            error: `${info.error_code ?? "UNKNOWN"}: ${backendMsg}`,
             timestamp: new Date().toISOString(),
           });
-          setErrorMessage(msg.message);
-          setStatus("error");
-          setProgress(0);
-          worker.terminate();
-          workerRef.current = null;
-          break;
+          setErrorMessage(backendMsg);
+        } else if (info.status === "queued") {
+          setStatus("queued");
+          pollTimerRef.current = setTimeout(() => void pollOnce(jobId), 1000);
+        } else {
+          // processing
+          setStatus("processing");
+          pollTimerRef.current = setTimeout(() => void pollOnce(jobId), 1000);
         }
+      } catch (err) {
+        if (cancelledRef.current) return;
+        stopPolling();
+        const message = describeApiError(err);
+        logCompressMetric({
+          status: "error",
+          fileName,
+          originalSize,
+          level: level ?? "media",
+          error: message,
+          timestamp: new Date().toISOString(),
+        });
+        setErrorMessage(message);
+        setStatus("error");
       }
-    };
+    },
+    [fileName, originalSize, level, stopPolling],
+  );
 
-    worker.onerror = (e) => {
-      clearCompressionTimeout();
-      const message = e.message || "Error desconocido en el worker.";
+  const handleCompress = useCallback(async () => {
+    if (!file || !level) return;
+    if (status !== "idle" && status !== "complete" && status !== "error") return;
+
+    cancelledRef.current = false;
+    setStatus("uploading");
+    setProgress(0);
+    setErrorMessage(null);
+    setJobInfo(null);
+
+    const startTime = performance.now();
+    let jobId: string;
+    try {
+      jobId = await createCompressJob(file, level);
+    } catch (err) {
+      const message = describeApiError(err);
       logCompressMetric({
         status: "error",
         fileName,
         originalSize,
-        level: activeLevel,
+        level,
         durationMs: performance.now() - startTime,
         error: message,
         timestamp: new Date().toISOString(),
       });
       setErrorMessage(message);
       setStatus("error");
-    };
+      return;
+    }
 
-    setStatus("compressing");
-    setProgress(0);
-    setErrorMessage(null);
-    setResultBytes(null);
-
-    const request: CompressRequest = { type: "compress", bytes: fileBytes, level: activeLevel };
-    worker.postMessage(request);
-  }, [fileBytes, level, status, fileName, originalSize, clearCompressionTimeout]);
+    currentJobIdRef.current = jobId;
+    // Move straight to the queued/processing poll loop — the upload itself
+    // has already completed at this point.
+    await pollOnce(jobId);
+  }, [file, level, status, fileName, originalSize, pollOnce]);
 
   const handleCancel = useCallback(() => {
-    // worker.terminate() kills the GS process mid-run. Any in-flight
-    // module.run() is interrupted; the next compression creates a fresh
-    // worker (WASM is browser-cached so the cost is small).
-    clearCompressionTimeout();
+    cancelledRef.current = true;
+    stopPolling();
+    const jid = currentJobIdRef.current;
+    currentJobIdRef.current = null;
+    if (jid) void deleteJob(jid);
     logCompressMetric({
       status: "cancelled",
       fileName,
@@ -236,24 +219,40 @@ export default function ComprimirPage() {
       level: level ?? "media",
       timestamp: new Date().toISOString(),
     });
-    workerRef.current?.terminate();
-    workerRef.current = null;
     setStatus("idle");
     setProgress(0);
-  }, [fileName, originalSize, level, clearCompressionTimeout]);
+  }, [fileName, originalSize, level, stopPolling]);
 
-  const handleDownload = useCallback(() => {
-    if (!resultBytes || !fileName) return;
-    // Copy into a fresh ArrayBuffer so the Blob constructor accepts it
-    // (Worker postMessage can return Uint8Array<SharedArrayBuffer>, which
-    // BlobPart does not allow directly).
-    const buf = new ArrayBuffer(resultBytes.byteLength);
-    new Uint8Array(buf).set(resultBytes);
-    const blob = new Blob([buf], { type: "application/pdf" });
-    downloadBlob(blob, suggestFileName(fileName, "comprimido"));
-  }, [resultBytes, fileName]);
+  const handleDownload = useCallback(async () => {
+    const jid = currentJobIdRef.current;
+    if (!jid) return;
+    try {
+      const { blob, filename } = await downloadJobResult(jid);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setErrorMessage(describeApiError(err));
+      setStatus("error");
+    }
+  }, []);
 
-  const isCompressing = status === "compressing";
+  const isBusy =
+    status === "uploading" || status === "queued" || status === "processing";
+
+  const statusLabel: Record<Status, string> = {
+    idle: "Listo para comprimir.",
+    uploading: "Subiendo archivo…",
+    queued: "En cola, esperando un worker libre…",
+    processing: "Procesando en el servidor…",
+    complete: "Listo.",
+    error: "Ocurrió un error.",
+  };
 
   return (
     <Layout>
@@ -262,21 +261,19 @@ export default function ComprimirPage() {
         Reducí el tamaño de un PDF eligiendo un nivel de compresión.
       </p>
 
-      {!fileBytes ? (
+      {!file ? (
         <UploadArea onFileSelected={handleFile} />
       ) : (
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-between gap-4 p-3 bg-surface border border-border rounded-lg">
             <div>
               <div className="font-medium text-text truncate">{fileName}</div>
-              <div className="text-sm text-text-muted">
-                {(originalSize / (1024 * 1024)).toFixed(1)} MB
-              </div>
+              <div className="text-sm text-text-muted">{formatBytes(originalSize)}</div>
             </div>
             <button
               type="button"
               onClick={handleClearFile}
-              disabled={isCompressing}
+              disabled={isBusy}
               className="text-sm px-3 py-1 border border-border rounded hover:border-primary disabled:opacity-50"
             >
               Cambiar archivo
@@ -291,7 +288,7 @@ export default function ComprimirPage() {
               levels={LEVELS}
               value={level}
               onChange={(id) => setLevel(id as CompressLevel)}
-              disabled={isCompressing}
+              disabled={isBusy}
             />
           </section>
 
@@ -301,9 +298,12 @@ export default function ComprimirPage() {
             </p>
           )}
 
-          {isCompressing && (
+          {isBusy && (
             <div className="flex flex-col gap-2">
               <ProgressBar pct={progress} />
+              <p className="text-sm text-text-muted" aria-live="polite">
+                {statusLabel[status]}
+              </p>
               <button
                 type="button"
                 onClick={handleCancel}
@@ -314,22 +314,22 @@ export default function ComprimirPage() {
             </div>
           )}
 
-          {status === "complete" && resultBytes && (
+          {status === "complete" && jobInfo && (
             <ResultBar
               originalBytes={originalSize}
-              resultBytes={resultBytes.byteLength}
+              resultBytes={jobInfo.output_bytes ?? 0}
               onDownload={handleDownload}
             />
           )}
 
-          {status === "idle" && (
+          {(status === "idle" || status === "complete" || status === "error") && (
             <button
               type="button"
               onClick={handleCompress}
-              disabled={!level}
+              disabled={!level || !file}
               className="self-start px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Comprimir y descargar
+              {status === "complete" ? "Comprimir de nuevo" : "Comprimir y descargar"}
             </button>
           )}
         </div>

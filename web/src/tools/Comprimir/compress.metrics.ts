@@ -1,4 +1,4 @@
-import type { CompressLevel } from "./compress.protocol";
+import type { CompressLevel } from "../../lib/api/jobs";
 
 /**
  * Lifecycle of a compression attempt, recorded once per attempt for

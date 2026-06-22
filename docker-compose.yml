@@ -30,7 +30,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATA_DIR: /data
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-104857600}
-      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-120}
+      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-300}
       OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-900}
       FOLIATE_TIMEOUT_SECONDS: ${FOLIATE_TIMEOUT_SECONDS:-60}
       PAGES_TIMEOUT_SECONDS: ${PAGES_TIMEOUT_SECONDS:-60}
@@ -67,7 +67,7 @@ services:
       DATA_DIR: /data
       WORKER_NAME: worker-compress-1
       WORKER_QUEUES: compress
-      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-120}
+      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-300}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - job-data:/data
@@ -89,7 +89,7 @@ services:
       DATA_DIR: /data
       WORKER_NAME: worker-compress-2
       WORKER_QUEUES: compress
-      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-120}
+      GS_TIMEOUT_SECONDS: ${GS_TIMEOUT_SECONDS:-300}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - job-data:/data

@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.health import router as health_router
+from app.api.jobs import router as jobs_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(health_router, tags=["health"])
+    app.include_router(jobs_router, tags=["jobs"])
     return app
 
 

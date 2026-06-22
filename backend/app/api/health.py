@@ -25,12 +25,15 @@ def _probe_binary(name: str, args: list[str], version_arg: str = "--version") ->
     path = shutil.which(name)
     if path is None:
         return HealthDependency(name=name, available=False, detail="binary not found")
+    # `ocrmypdf` is a Python wrapper and takes ~5-10s to import + print
+    # --version on a cold start. The 20s ceiling covers that without
+    # hanging a real health probe on a stuck subprocess.
     try:
         proc = subprocess.run(
             [path, version_arg],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=20,
             check=False,
         )
     except (subprocess.TimeoutExpired, OSError) as exc:

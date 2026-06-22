@@ -12,8 +12,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@jspawn/ghostscript-wasm": "^0.0.2",
-    "coi-serviceworker": "^0.1.7",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.0.227",
     "react": "^19.2.6",

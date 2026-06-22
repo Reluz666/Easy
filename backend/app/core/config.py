@@ -33,7 +33,8 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(default=100 * 1024 * 1024)
 
     # --- Tool timeouts (seconds) -----------------------------------------
-    gs_timeout_seconds: int = Field(default=120)
+    # Worst case: 100 MB scanned PDF at /printer on slow CPUs can take ~5 min.
+    gs_timeout_seconds: int = Field(default=300)
     ocr_timeout_seconds: int = Field(default=900)
     foliate_timeout_seconds: int = Field(default=60)
     pages_timeout_seconds: int = Field(default=60)
