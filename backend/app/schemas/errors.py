@@ -42,9 +42,7 @@ def message_for(code: ErrorCode, **kwargs: object) -> str:
         ),
         ErrorCode.OCR_FAILED: "No se pudo aplicar OCR al PDF.",
         ErrorCode.FOLIATE_FAILED: "No se pudo foliar el PDF.",
-        ErrorCode.PAGES_FAILED: (
-            "La operación de páginas no es válida. Verificá los números de página."
-        ),
+        ErrorCode.PAGES_FAILED: "El rango de páginas no es válido.",
         ErrorCode.JOB_NOT_FOUND: (
             "No encontramos el trabajo. Puede haber expirado (TTL {ttl_h} h)."
         ),

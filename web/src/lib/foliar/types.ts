@@ -1,58 +1,43 @@
+/**
+ * Foliation configuration sent to POST /api/jobs/foliate.
+ *
+ * Mirrors the backend's `FoliateParams` exactly so the form field names
+ * match what the API expects. Anything beyond this set lives on the server.
+ */
 export type FolioPosition =
   | "top-left"
   | "top-center"
   | "top-right"
-  | "middle-left"
-  | "middle-center"
-  | "middle-right"
   | "bottom-left"
   | "bottom-center"
   | "bottom-right";
 
 export const FOLIO_POSITIONS: FolioPosition[] = [
   "top-left", "top-center", "top-right",
-  "middle-left", "middle-center", "middle-right",
   "bottom-left", "bottom-center", "bottom-right",
 ];
 
-export type NumberStyle = "numbers" | "words" | "both" | "n-t";
-
-export type FolioFont = "Helvetica" | "TimesRoman" | "Courier" | "Verdana" | "Georgia";
-
-export const FOLIO_FONTS: FolioFont[] = [
-  "Helvetica",
-  "TimesRoman",
-  "Courier",
-  "Verdana",
-  "Georgia",
-];
+export type FolioRangeMode = "all" | "from-to";
 
 export type FoliarConfig = {
-  position: FolioPosition;
-  numberStyle: NumberStyle;
-  font: FolioFont;
-  fontSize: number;     // pt; range 6–72
-  color: string;        // hex like "#000000"
-  range: {
-    initialNumber: number; // default 1
-    from: number;          // page where foliado starts (1-indexed)
-    to: number;            // page where foliado ends (1-indexed)
-  };
+  initial_number: number;       // ≥ 1; default 1
+  prefix: string;               // optional, e.g. "Folio "
+  position: FolioPosition;      // default "bottom-center"
+  font_size: number;            // 6–72 pt; default 12
+  range_mode: FolioRangeMode;   // default "all"
+  from_page: number | null;     // 1-indexed; required when range_mode="from-to"
+  to_page: number | null;       // 1-indexed; required when range_mode="from-to"
 };
 
 export const DEFAULT_FOLIAR_CONFIG: FoliarConfig = {
+  initial_number: 1,
+  prefix: "",
   position: "bottom-center",
-  numberStyle: "numbers",
-  font: "Helvetica",
-  fontSize: 12,
-  color: "#000000",
-  range: {
-    initialNumber: 1,
-    from: 1,
-    to: 1, // overwritten when a PDF is loaded
-  },
+  font_size: 12,
+  range_mode: "all",
+  from_page: null,
+  to_page: null,
 };
 
 export const FOLIO_FONT_SIZE_MIN = 6;
 export const FOLIO_FONT_SIZE_MAX = 72;
-export const FOLIO_MARGIN_PT = 24; // distance from page edge to folio text

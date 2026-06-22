@@ -44,6 +44,11 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 # with 422 before the handler runs.
 CompressLevel = Literal["baja", "media", "alta"]
 OcrLang = Literal["spa+eng", "spa", "eng"]
+FoliatePosition = Literal[
+    "top-left", "top-center", "top-right",
+    "bottom-left", "bottom-center", "bottom-right",
+]
+FoliateRangeMode = Literal["all", "from-to"]
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +171,102 @@ def create_ocr_job(
         job_id,
         lang,
         job_timeout=settings.ocr_timeout_seconds + 60,
+        result_ttl=settings.job_ttl_seconds,
+        failure_ttl=settings.job_ttl_seconds,
+    )
+
+    return JobCreatedResponse(jobId=job_id, status="queued")
+
+
+# ---------------------------------------------------------------------------
+# POST /api/jobs/foliate
+#
+# Error contract:
+#   * 422 — invalid position / range_mode / font_size / initial_number
+#           (Literal + Pydantic constraints reject before the handler runs)
+#   * 400 PAGES_FAILED — range_mode == "from-to" but from_page/to_page
+#           are missing, or from_page > to_page. Bounds against the actual
+#           PDF page count happen in the worker and surface as 200 +
+#           status="failed" via GET /api/jobs/{jobId}.
+#   * 400 FILE_NOT_PDF / FILE_TOO_LARGE — upload validator
+#   * 500 — unexpected error saving the file
+#   * 202 — accepted, job enqueued
+# ---------------------------------------------------------------------------
+@router.post(
+    "/foliate",
+    response_model=JobCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def create_foliate_job(
+    file: UploadFile = File(...),
+    initial_number: int = Form(default=1, ge=1),
+    prefix: str = Form(default=""),
+    position: FoliatePosition = Form(default="bottom-center"),
+    font_size: int = Form(default=12, ge=6, le=72),
+    range_mode: FoliateRangeMode = Form(default="all"),
+    from_page: int | None = Form(default=None, ge=1),
+    to_page: int | None = Form(default=None, ge=1),
+) -> JobCreatedResponse:
+    if range_mode == "from-to":
+        if from_page is None or to_page is None or from_page > to_page:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "errorCode": ErrorCode.PAGES_FAILED.value,
+                    "message": message_for(ErrorCode.PAGES_FAILED),
+                },
+            )
+
+    settings = get_settings()
+    job_id = new_job_id()
+    saved = save_pdf_upload(file, job_id)
+
+    info = job_store.create_job(
+        job_id=job_id,
+        operation=JobOperation.FOLIATE,
+        input_path=str(saved.path),
+        safe_name=saved.safe_name,
+        input_bytes=saved.size,
+        params={
+            "initial_number": initial_number,
+            "prefix": prefix,
+            "position": position,
+            "font_size": font_size,
+            "range_mode": range_mode,
+            "from_page": from_page,
+            "to_page": to_page,
+        },
+    )
+
+    log.info(
+        "api.jobs.foliate.created",
+        jobId=job_id,
+        operation="foliate",
+        position=position,
+        font_size=font_size,
+        range_mode=range_mode,
+        from_page=from_page,
+        to_page=to_page,
+        initial_number=initial_number,
+        prefix=prefix,
+        input_name=saved.safe_name,
+        input_bytes=saved.size,
+    )
+
+    from app.tasks.foliate import run_foliate
+
+    queue = get_queue("foliate")
+    queue.enqueue(
+        run_foliate,
+        job_id,
+        initial_number,
+        prefix,
+        position,
+        font_size,
+        range_mode,
+        from_page,
+        to_page,
+        job_timeout=settings.foliate_timeout_seconds + 60,
         result_ttl=settings.job_ttl_seconds,
         failure_ttl=settings.job_ttl_seconds,
     )

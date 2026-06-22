@@ -1,221 +1,286 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import UploadArea from "../../components/UploadArea";
-import FileBar from "./FileBar";
-import FoliarConfigPanel from "./FoliarConfig";
-import FoliarPreview from "./FoliarPreview";
-import { loadPdfFromFile, type LoadedPdf } from "../../lib/pdf/load";
-import { downloadBlob, suggestFileName, type NameSuffix } from "../../lib/pdf/download";
+import ProgressBar from "../Comprimir/ProgressBar";
+import ResultBar from "../Comprimir/ResultBar";
+import {
+  type JobInfo,
+  createFoliateJob,
+  deleteJob,
+  describeApiError,
+  downloadJobResult,
+  getJob,
+} from "../../lib/api/jobs";
+import { formatBytes } from "../../lib/format";
 import { DEFAULT_FOLIAR_CONFIG, type FoliarConfig } from "../../lib/foliar/types";
-import { validateFolioRange } from "../../lib/foliar/validation";
-import FoliarWorker from "./foliar.worker.ts?worker";
-import type { FoliarRequest, FoliarResponse } from "./foliar.protocol";
+import { validateFoliateConfig } from "../../lib/foliar/validation";
+import FoliarConfigPanel from "./FoliarConfig";
 
-const SUFFIX: NameSuffix = "foliado";
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
-type LoadedState = {
-  loaded: LoadedPdf;
-  bytes: Uint8Array;
+type Status = "idle" | "uploading" | "queued" | "processing" | "complete" | "error";
+
+const STATUS_LABEL: Record<Status, string> = {
+  idle: "Listo para foliar.",
+  uploading: "Subiendo PDF…",
+  queued: "En cola, esperando un worker libre…",
+  processing: "Aplicando folio en el servidor…",
+  complete: "Foliado. El PDF ya tiene números de página.",
+  error: "Ocurrió un error.",
 };
 
 export default function FoliarPage() {
-  const [state, setState] = useState<LoadedState | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState<string>("");
+  const [originalSize, setOriginalSize] = useState<number>(0);
   const [config, setConfig] = useState<FoliarConfig>(DEFAULT_FOLIAR_CONFIG);
-  const [processing, setProcessing] = useState(false);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
-  const [processError, setProcessError] = useState<string | null>(null);
-  const workerRef = useRef<Worker | null>(null);
+  const [status, setStatus] = useState<Status>("idle");
+  const [progress, setProgress] = useState<number>(0);
+  const [jobInfo, setJobInfo] = useState<JobInfo | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Initialize config.to when a new PDF is loaded
-  useEffect(() => {
-    if (state) {
-      setConfig((c) => ({
-        ...c,
-        range: { ...c.range, from: 1, to: state.loaded.pageCount },
-      }));
-      setCurrentPage(1);
-    }
-  }, [state]);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentJobIdRef = useRef<string | null>(null);
+  const cancelledRef = useRef<boolean>(false);
 
-  // Clean up worker on unmount
   useEffect(() => {
     return () => {
-      if (workerRef.current) {
-        workerRef.current.terminate();
-        workerRef.current = null;
-      }
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      const jid = currentJobIdRef.current;
+      if (jid) void deleteJob(jid);
     };
   }, []);
 
-  async function handleFileSelected(file: File) {
-    setLoadError(null);
-    try {
-      const loaded = await loadPdfFromFile(file);
-      const bytes = await loaded.document.save();
-      setState({ loaded, bytes });
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Error al cargar el PDF.");
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
     }
-  }
+  }, []);
 
-  function handleChangeFile() {
-    if (workerRef.current) {
-      workerRef.current.terminate();
-      workerRef.current = null;
+  const resetAll = useCallback(() => {
+    setFile(null);
+    setFileName("");
+    setOriginalSize(0);
+    setConfig(DEFAULT_FOLIAR_CONFIG);
+    setStatus("idle");
+    setProgress(0);
+    setJobInfo(null);
+    setErrorMessage(null);
+  }, []);
+
+  const handleFile = useCallback((selected: File) => {
+    setErrorMessage(null);
+    if (selected.size > MAX_UPLOAD_BYTES) {
+      const mb = (selected.size / 1024 / 1024).toFixed(1);
+      setErrorMessage(
+        `Este PDF es demasiado pesado (${mb} MB). El máximo permitido es ${(MAX_UPLOAD_BYTES / 1024 / 1024).toFixed(0)} MB.`,
+      );
+      return;
     }
-    setProcessing(false);
-    setProgress(null);
-    setProcessError(null);
-    setState(null);
-    setCurrentPage(1);
-  }
+    setFile(selected);
+    setFileName(selected.name);
+    setOriginalSize(selected.size);
+    setConfig(DEFAULT_FOLIAR_CONFIG);
+    setStatus("idle");
+    setProgress(0);
+    setJobInfo(null);
+    setErrorMessage(null);
+  }, []);
 
-  function handleGenerate() {
-    if (!state) return;
-    if (rangeError) return;
+  const handleClearFile = useCallback(() => {
+    stopPolling();
+    const jid = currentJobIdRef.current;
+    currentJobIdRef.current = null;
+    cancelledRef.current = false;
+    if (jid) void deleteJob(jid);
+    resetAll();
+  }, [stopPolling, resetAll]);
 
-    const total = config.range.to - config.range.from + 1;
-    setProcessing(true);
-    setProgress({ current: 0, total });
-    setProcessError(null);
-
-    const worker = new FoliarWorker();
-    workerRef.current = worker;
-
-    worker.addEventListener("message", (e: MessageEvent<FoliarResponse>) => {
-      const msg = e.data;
-      if (msg.type === "progress") {
-        setProgress({ current: msg.current, total: msg.total });
-      } else if (msg.type === "complete") {
-        // Copy into a fresh ArrayBuffer: worker may return Uint8Array backed
-        // by SharedArrayBuffer, which BlobPart does not accept directly.
-        const buf = new ArrayBuffer(msg.bytes.byteLength);
-        new Uint8Array(buf).set(msg.bytes);
-        const blob = new Blob([buf], { type: "application/pdf" });
-        downloadBlob(blob, suggestFileName(state.loaded.fileName, SUFFIX));
-        setProcessing(false);
-        setProgress(null);
-        worker.terminate();
-        workerRef.current = null;
-      } else if (msg.type === "cancelled") {
-        setProcessing(false);
-        setProgress(null);
-        worker.terminate();
-        workerRef.current = null;
-      } else if (msg.type === "error") {
-        setProcessError(msg.message);
-        setProcessing(false);
-        setProgress(null);
-        worker.terminate();
-        workerRef.current = null;
+  const pollOnce = useCallback(
+    async (jobId: string) => {
+      try {
+        const info = await getJob(jobId);
+        if (cancelledRef.current) return;
+        setJobInfo(info);
+        setProgress(info.progress);
+        if (info.status === "done") {
+          stopPolling();
+          setStatus("complete");
+          setProgress(100);
+        } else if (info.status === "failed") {
+          stopPolling();
+          setStatus("error");
+          setErrorMessage(
+            info.error_message ?? "El servidor rechazó el archivo o falló durante el procesamiento.",
+          );
+        } else if (info.status === "queued") {
+          setStatus("queued");
+          pollTimerRef.current = setTimeout(() => void pollOnce(jobId), 1000);
+        } else {
+          setStatus("processing");
+          pollTimerRef.current = setTimeout(() => void pollOnce(jobId), 1000);
+        }
+      } catch (err) {
+        if (cancelledRef.current) return;
+        stopPolling();
+        setErrorMessage(describeApiError(err));
+        setStatus("error");
       }
-    });
+    },
+    [stopPolling],
+  );
 
-    const request: FoliarRequest = {
-      type: "process",
-      fileBytes: state.bytes,
-      config,
-    };
-    worker.postMessage(request);
-  }
+  const handleSubmit = useCallback(async () => {
+    if (!file) return;
+    if (status !== "idle" && status !== "complete" && status !== "error") return;
 
-  function handleCancel() {
-    if (workerRef.current) {
-      const cancel: FoliarRequest = { type: "cancel" };
-      workerRef.current.postMessage(cancel);
+    cancelledRef.current = false;
+    setStatus("uploading");
+    setProgress(0);
+    setErrorMessage(null);
+    setJobInfo(null);
+
+    let jobId: string;
+    try {
+      jobId = await createFoliateJob(file, {
+        initial_number: config.initial_number,
+        prefix: config.prefix,
+        position: config.position,
+        font_size: config.font_size,
+        range_mode: config.range_mode,
+        from_page: config.range_mode === "from-to" ? config.from_page : null,
+        to_page: config.range_mode === "from-to" ? config.to_page : null,
+      });
+    } catch (err) {
+      setErrorMessage(describeApiError(err));
+      setStatus("error");
+      return;
     }
-  }
 
-  const rangeError = state ? validateFolioRange(config.range, state.loaded.pageCount) : null;
-  const canGenerate = state && !rangeError && !processing;
+    currentJobIdRef.current = jobId;
+    await pollOnce(jobId);
+  }, [file, config, status, pollOnce]);
 
-  if (!state) {
-    return (
-      <Layout>
-        <h1 className="text-2xl font-semibold text-text mb-2">Foliar</h1>
-        <p className="text-text-muted mb-6">Numerar las páginas de un PDF.</p>
-        <UploadArea onFileSelected={handleFileSelected} />
-        {loadError && (
-          <p role="alert" className="text-red-600 text-sm mt-3">{loadError}</p>
-        )}
-      </Layout>
-    );
-  }
+  const handleCancel = useCallback(() => {
+    cancelledRef.current = true;
+    stopPolling();
+    const jid = currentJobIdRef.current;
+    currentJobIdRef.current = null;
+    if (jid) void deleteJob(jid);
+    setStatus("idle");
+    setProgress(0);
+  }, [stopPolling]);
 
-  const { loaded, bytes } = state;
+  const handleDownload = useCallback(async () => {
+    const jid = currentJobIdRef.current;
+    if (!jid) return;
+    try {
+      const { blob, filename } = await downloadJobResult(jid);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setErrorMessage(describeApiError(err));
+      setStatus("error");
+    }
+  }, []);
+
+  // Page count is unknown client-side without parsing the PDF; we let
+  // the backend enforce bounds and surface out-of-range failures via
+  // status=failed + PAGES_FAILED. We *do* validate the range shape so the
+  // user gets instant feedback on inverted/missing bounds without an upload.
+  const rangeError = useMemo(() => validateFoliateConfig(config, null), [config]);
+  const isBusy = status === "uploading" || status === "queued" || status === "processing";
+  const canSubmit = !!file && !isBusy;
 
   return (
     <Layout>
-      <h1 className="text-2xl font-semibold text-text mb-4">Foliar</h1>
+      <h1 className="text-2xl font-semibold text-text mb-2">Foliar</h1>
+      <p className="text-text-muted mb-6">Numerá las páginas de un PDF.</p>
 
-      <div className="mb-4">
-        <FileBar
-          fileName={loaded.fileName}
-          fileSize={loaded.fileSize}
-          pageCount={loaded.pageCount}
-          onChangeFile={handleChangeFile}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
-        <FoliarPreview
-          bytes={bytes}
-          pageNumber={currentPage}
-          pageCount={loaded.pageCount}
-          config={config}
-          onPageChange={setCurrentPage}
-        />
-        <div className="bg-surface border border-border rounded-lg p-4">
-          <h2 className="font-semibold text-text mb-4 pb-2 border-b border-border">Configuración del folio</h2>
-          <FoliarConfigPanel
-            config={config}
-            totalPages={loaded.pageCount}
-            rangeError={rangeError}
-            onChange={setConfig}
-          />
-          <div className="mt-4 pt-4 border-t border-border">
-            {processError && (
-              <p role="alert" className="text-red-600 text-sm mb-2">{processError}</p>
-            )}
-            {processing && progress && (
-              <div className="mb-3" aria-live="polite">
-                <div className="text-xs text-text-muted mb-1">
-                  Procesando {progress.current} de {progress.total}…
-                </div>
-                <div
-                  className="h-2 bg-bg rounded overflow-hidden"
-                  role="progressbar"
-                  aria-valuenow={progress.current}
-                  aria-valuemin={0}
-                  aria-valuemax={progress.total}
-                >
-                  <div
-                    className="h-full bg-primary transition-all"
-                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="mt-2 w-full text-sm bg-surface border border-border text-text px-3 py-1.5 rounded hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  Cancelar
-                </button>
-              </div>
-            )}
+      {!file ? (
+        <UploadArea onFileSelected={handleFile} />
+      ) : (
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-between gap-4 p-3 bg-surface border border-border rounded-lg">
+            <div>
+              <div className="font-medium text-text truncate">{fileName}</div>
+              <div className="text-sm text-text-muted">{formatBytes(originalSize)}</div>
+            </div>
             <button
               type="button"
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              className="w-full bg-primary text-white px-4 py-2 rounded font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary"
+              onClick={handleClearFile}
+              disabled={isBusy}
+              className="text-sm px-3 py-1 border border-border rounded hover:border-primary disabled:opacity-50"
             >
-              {processing ? "Procesando…" : "Generar PDF foliado"}
+              Cambiar archivo
             </button>
           </div>
+
+          <section aria-labelledby="foliar-config-heading" className="flex flex-col gap-3">
+            <h2 id="foliar-config-heading" className="text-lg font-medium text-text">
+              Configuración del folio
+            </h2>
+            <div className="bg-surface border border-border rounded-lg p-4">
+              <FoliarConfigPanel
+                config={config}
+                totalPages={null}
+                rangeError={rangeError}
+                onChange={setConfig}
+                disabled={isBusy}
+              />
+            </div>
+          </section>
+
+          {errorMessage && (
+            <p role="alert" className="text-red-600 text-sm" data-testid="foliar-error">
+              {errorMessage}
+            </p>
+          )}
+
+          {isBusy && (
+            <div className="flex flex-col gap-2">
+              <ProgressBar pct={progress} />
+              <p className="text-sm text-text-muted" aria-live="polite">
+                {STATUS_LABEL[status]}
+              </p>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="self-start text-sm px-3 py-1 border border-border rounded hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+
+          {status === "complete" && jobInfo && (
+            <ResultBar
+              originalBytes={originalSize}
+              resultBytes={jobInfo.output_bytes ?? 0}
+              onDownload={handleDownload}
+            />
+          )}
+
+          {(status === "idle" || status === "complete" || status === "error") && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              data-testid="submit-button"
+              className="self-start px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {status === "complete" ? "Foliar de nuevo" : "Foliar y descargar"}
+            </button>
+          )}
         </div>
-      </div>
+      )}
     </Layout>
   );
 }

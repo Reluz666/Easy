@@ -9,6 +9,16 @@ export type CompressLevel = "baja" | "media" | "alta";
 
 export type OcrLang = "spa+eng" | "spa" | "eng";
 
+export type FoliatePosition =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
+
+export type FoliateRangeMode = "all" | "from-to";
+
 export type JobStatus = "queued" | "processing" | "done" | "failed";
 
 export type JobInfo = {
@@ -19,6 +29,13 @@ export type JobInfo = {
   params: {
     level?: CompressLevel;
     lang?: OcrLang;
+    initial_number?: number;
+    prefix?: string;
+    position?: FoliatePosition;
+    font_size?: number;
+    range_mode?: FoliateRangeMode;
+    from_page?: number | null;
+    to_page?: number | null;
     safe_name?: string;
     [k: string]: unknown;
   };
@@ -140,6 +157,53 @@ export async function createOcrJob(
   fd.append("lang", lang);
 
   const resp = await fetch("/api/jobs/ocr", {
+    method: "POST",
+    body: fd,
+    signal,
+  });
+  if (!resp.ok) {
+    const err = await readJsonError(resp);
+    throw new JobApiError(resp.status, err.errorCode, err.message);
+  }
+  const body = (await resp.json()) as JobCreatedResponse;
+  return body.jobId;
+}
+
+/**
+ * Upload a PDF and create a foliation job. Returns the API-level jobId.
+ *
+ * Same async error contract as `createOcrJob`: this call only surfaces
+ * synchronous validation errors (invalid position/range_mode, file is not
+ * a PDF, file too large, missing/inverted from-to bounds). Worker-side
+ * failures (PAGES_FAILED out of bounds, FOLIATE_FAILED, FILE_CORRUPT,
+ * FILE_ENCRYPTED) are NOT in the POST response — they're written to the
+ * job state in Redis. The caller must poll `getJob` to read the eventual
+ * outcome.
+ */
+export async function createFoliateJob(
+  file: File,
+  params: {
+    initial_number: number;
+    prefix: string;
+    position: FoliatePosition;
+    font_size: number;
+    range_mode: FoliateRangeMode;
+    from_page: number | null;
+    to_page: number | null;
+  },
+  signal?: AbortSignal,
+): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  fd.append("initial_number", String(params.initial_number));
+  fd.append("prefix", params.prefix);
+  fd.append("position", params.position);
+  fd.append("font_size", String(params.font_size));
+  fd.append("range_mode", params.range_mode);
+  if (params.from_page !== null) fd.append("from_page", String(params.from_page));
+  if (params.to_page !== null) fd.append("to_page", String(params.to_page));
+
+  const resp = await fetch("/api/jobs/foliate", {
     method: "POST",
     body: fd,
     signal,
