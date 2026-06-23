@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     # hasn't enqueued the task yet; short enough to actually clean mistakes.
     cleanup_grace_seconds: int = Field(default=60 * 60)
 
+    # --- Rate limiting ----------------------------------------------------
+    # Per-IP fixed-window limits on the 4 `POST /api/jobs/*` endpoints.
+    # The limit is consumed only AFTER upload validation passes, so a bad
+    # PDF / oversize / missing field never counts against the bucket.
+    rate_limit_enabled: bool = Field(default=True)
+    rate_limit_jobs_per_minute: int = Field(default=5)
+    rate_limit_jobs_per_hour: int = Field(default=30)
+    rate_limit_max_active_jobs_per_ip: int = Field(default=3)
+
+    # Trust the `X-Forwarded-For` header. ONLY enable this when the API
+    # sits behind a known reverse proxy that strips client-supplied XFF
+    # and re-injects the real client IP. Leaving this off means we use
+    # `request.client.host` directly, which an attacker cannot spoof.
+    trust_proxy_headers: bool = Field(default=False)
+
     # --- Logging ----------------------------------------------------------
     log_level: str = Field(default="INFO")
 

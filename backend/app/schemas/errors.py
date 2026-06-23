@@ -16,6 +16,8 @@ class ErrorCode(str, Enum):
     INVALID_PAGE_RANGE = "INVALID_PAGE_RANGE"
     INVALID_OPERATION = "INVALID_OPERATION"
     JOB_NOT_FOUND = "JOB_NOT_FOUND"
+    RATE_LIMITED = "RATE_LIMITED"
+    TOO_MANY_ACTIVE_JOBS = "TOO_MANY_ACTIVE_JOBS"
     INTERNAL = "INTERNAL"
 
 
@@ -49,6 +51,13 @@ def message_for(code: ErrorCode, **kwargs: object) -> str:
         ErrorCode.INVALID_OPERATION: "La operación solicitada no es válida.",
         ErrorCode.JOB_NOT_FOUND: (
             "No encontramos el trabajo. Puede haber expirado (TTL {ttl_h} h)."
+        ),
+        ErrorCode.RATE_LIMITED: (
+            "Has enviado demasiadas solicitudes. Intenta nuevamente en unos minutos."
+        ),
+        ErrorCode.TOO_MANY_ACTIVE_JOBS: (
+            "Ya tienes demasiados archivos procesándose. "
+            "Espera a que terminen antes de subir otro."
         ),
         ErrorCode.INTERNAL: "Error interno. Reintentá en unos minutos.",
     }

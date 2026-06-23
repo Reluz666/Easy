@@ -88,6 +88,55 @@ docker compose run --rm worker-cleanup python -m app.cleanup --once
 docker compose run --rm worker-cleanup python -m app.cleanup --json
 ```
 
+## Rate limiting
+
+Los 4 `POST /api/jobs/*` están protegidos con un rate limiter de
+**fixed window por IP**, respaldado por Redis (funciona en deployments
+multi-instancia). Defaults:
+
+| Variable                              | Default | Significado                              |
+|---------------------------------------|---------|------------------------------------------|
+| `RATE_LIMIT_ENABLED`                  | `true`  | Apagálo solo en dev / redes confiables   |
+| `RATE_LIMIT_JOBS_PER_MINUTE`          | `5`     | Requests por IP por minuto               |
+| `RATE_LIMIT_JOBS_PER_HOUR`            | `30`    | Requests por IP por hora                 |
+| `RATE_LIMIT_MAX_ACTIVE_JOBS_PER_IP`   | `3`     | Jobs `queued`/`processing` simultáneos   |
+| `TRUST_PROXY_HEADERS`                 | `false` | Habilitar XFF **solo detrás de proxy**    |
+
+**La cuota NO se consume** si el upload falla validación (PDF
+incorrecto, oversize, falta `ops` o `extra_file`). Las validaciones
+corren como dependencias de FastAPI **antes** del rate limit.
+
+Las respuestas de error son JSON con `errorCode` + `message` en
+español:
+
+- `429` con `errorCode: "RATE_LIMITED"` — “Has enviado demasiadas
+  solicitudes. Intenta nuevamente en unos minutos.”
+- `429` con `errorCode: "TOO_MANY_ACTIVE_JOBS"` — “Ya tienes demasiados
+  archivos procesándose. Espera a que terminen antes de subir otro.”
+
+Toda respuesta (200, 202, 429) lleva los headers:
+
+- `X-RateLimit-Limit`
+- `X-RateLimit-Remaining`
+- `Retry-After` (solo en 429)
+
+**Sobre `TRUST_PROXY_HEADERS`**: si está apagado (default), la IP
+viene de `request.client.host` — el peer TCP real, no spoofable.
+Si está prendido, se usa el primer hop de `X-Forwarded-For`. Solo
+habilitar detrás de un reverse proxy que **re-escriba** ese header
+(nginx con `proxy_set_header X-Forwarded-For $remote_addr`, ALB,
+Cloudflare, etc.). Un atacante puede rotar IPs enviando XFF
+manualmente si no hay un proxy de confianza delante.
+
+> **Nota sobre uvicorn.** Uvicorn 0.34 trae su propio parseo de
+> `X-Forwarded-For` cuando el peer TCP es `127.0.0.1` (su default
+> `--forwarded-allow-ips=127.0.0.1`). Para que `TRUST_PROXY_HEADERS`
+> sea la única fuente de verdad, `docker-compose.yml` arranca uvicorn
+> con `--forwarded-allow-ips=` (cadena vacía = nunca confía en XFF a
+> nivel servidor). Si desplegás detrás de un proxy real, mantené este
+> flag y administrá la confianza con `TRUST_PROXY_HEADERS` desde la
+> app.
+
 ## Desarrollo del backend sin Docker
 
 ```bash

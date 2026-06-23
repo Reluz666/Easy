@@ -39,6 +39,10 @@ class JobInfo(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    # IP that submitted the job. Used by the rate limiter to count
+    # active jobs per source. Optional for backward compatibility with
+    # jobs persisted before the rate-limit feature shipped.
+    client_ip: str | None = None
 
 
 class JobCreatedResponse(BaseModel):

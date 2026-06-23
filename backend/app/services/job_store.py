@@ -40,6 +40,8 @@ def create_job(
     safe_name: str,
     input_bytes: int,
     params: dict[str, Any],
+    *,
+    client_ip: str | None = None,
 ) -> JobInfo:
     """Initial state — `queued`. Called by the API immediately after upload."""
     info = JobInfo(
@@ -50,6 +52,7 @@ def create_job(
         input_path=input_path,
         input_bytes=input_bytes,
         created_at=_now(),
+        client_ip=client_ip,
     )
     _save(info)
     return info
@@ -106,6 +109,14 @@ def update_status(
         else:
             info.progress = 0
     _save(info)
+    # Once the job leaves the active set, drop the per-IP counter so
+    # the slot becomes available again. We import lazily to avoid a
+    # circular dependency: rate_limit -> queue -> settings, while
+    # services -> rate_limit stays one-directional.
+    if status in (JobStatus.DONE, JobStatus.FAILED) and info.client_ip:
+        from app.core.rate_limit import limiter
+
+        limiter.release_active(info.client_ip, info.id)
     return info
 
 
