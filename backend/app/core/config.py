@@ -43,6 +43,17 @@ class Settings(BaseSettings):
     # How long Redis keeps job state + output file before cleanup.
     job_ttl_seconds: int = Field(default=24 * 60 * 60)
 
+    # --- Cleanup worker ---------------------------------------------------
+    # How often the cleanup worker scans `/data/inputs`, `/data/outputs`, and
+    # `/data/extra-inputs` for aged-out jobs and orphans. Lower = more
+    # frequent disk scans; higher = longer window where aged jobs linger.
+    cleanup_interval_seconds: int = Field(default=300)
+
+    # Grace period before a directory with no matching Redis key is removed.
+    # Long enough to cover an upload that just finished writing to disk but
+    # hasn't enqueued the task yet; short enough to actually clean mistakes.
+    cleanup_grace_seconds: int = Field(default=60 * 60)
+
     # --- Logging ----------------------------------------------------------
     log_level: str = Field(default="INFO")
 

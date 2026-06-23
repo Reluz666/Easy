@@ -45,6 +45,7 @@ npm run dev    # http://localhost:5173 — proxya /api → http://localhost:8000
 | `worker-ocr`          | OCR vía OCRmyPDF                                        |
 | `worker-foliate`      | Foliar con PyMuPDF                                      |
 | `worker-pages`        | Eliminar / rotar / reordenar páginas con pikepdf        |
+| `worker-cleanup`      | GC periódico de `/data` (jobs viejos + huérfanos)       |
 
 `deploy.replicas` no se usa: solo aplica en Swarm. Para más workers de
 compresión, copiá el bloque `worker-compress-1` y renombrá el `WORKER_NAME`.
@@ -68,6 +69,24 @@ compresión, copiá el bloque `worker-compress-1` y renombrá el `WORKER_NAME`.
 - Logs estructurados JSON en stdout (`docker compose logs -f api`).
 - Cada tool corre con `subprocess.communicate(timeout=…)` y se mata con
   SIGTERM → SIGKILL si excede el límite configurado en `.env`.
+
+## Limpieza de archivos en `/data`
+
+El `worker-cleanup` corre en background y borra cada
+`CLEANUP_INTERVAL_SECONDS`:
+
+- Jobs `done`/`failed` más viejos que `JOB_TTL_SECONDS` (default 24 h).
+- Directorios huérfanos (sin `job:{id}` en Redis) más viejos que
+  `CLEANUP_GRACE_SECONDS` (default 1 h).
+- **Nunca** borra jobs `queued`/`processing`.
+
+Para forzar una pasada manual (sin reiniciar el contenedor):
+
+```bash
+docker compose run --rm worker-cleanup python -m app.cleanup --once
+# o con el reporte como JSON:
+docker compose run --rm worker-cleanup python -m app.cleanup --json
+```
 
 ## Desarrollo del backend sin Docker
 

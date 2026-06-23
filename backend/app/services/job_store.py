@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterator
 
 import redis
 
@@ -119,3 +119,44 @@ def _save(info: JobInfo) -> None:
 
 def delete_job(job_id: str) -> bool:
     return get_redis().delete(_key(job_id)) > 0
+
+
+def iter_jobs() -> Iterator[tuple[str, JobStatus]]:
+    """Yield `(job_id, status)` for every job currently in Redis.
+
+    Uses `SCAN` (non-blocking) so it's safe to call on a keyspace with
+    thousands of entries. Keys that fail to parse (e.g. a partial write
+    from a crashed process) are silently skipped — a malformed blob is
+    not the cleanup worker's problem to fix; leaving it alone keeps the
+    job visible to `GET /api/jobs/{id}`, which will surface the parse
+    error to the user.
+
+    The cleanup worker is the only consumer today; we keep the surface
+    minimal (id + status) because that's all most callers need. Use
+    `iter_jobs_full()` when you need `JobInfo` (e.g. `finished_at`).
+    """
+    for job_id, info in iter_jobs_full():
+        yield job_id, info.status
+
+
+def iter_jobs_full() -> Iterator[tuple[str, JobInfo]]:
+    """Yield `(job_id, JobInfo)` for every parseable job in Redis.
+
+    Malformed blobs are skipped (see `iter_jobs` for the rationale).
+    Returns the full `JobInfo` so callers that need `finished_at`,
+    `created_at`, etc. don't have to round-trip a second time per key.
+    """
+    r = get_redis()
+    for raw_key in r.scan_iter(match="job:*"):
+        key = raw_key.decode("utf-8") if isinstance(raw_key, bytes) else str(raw_key)
+        if not key.startswith("job:"):
+            continue
+        job_id = key[len("job:"):]
+        raw = r.get(key)
+        if raw is None:
+            continue
+        try:
+            info = JobInfo.model_validate_json(raw)
+        except Exception:
+            continue
+        yield job_id, info

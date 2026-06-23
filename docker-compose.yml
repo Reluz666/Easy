@@ -165,6 +165,36 @@ services:
       api:
         condition: service_started
 
+  # =========================================================================
+  # Cleanup worker — periodic garbage collector for /data.
+  # Runs `cleanup_once()` every CLEANUP_INTERVAL_SECONDS. Reaps:
+  #   - `done`/`failed` jobs older than JOB_TTL_SECONDS
+  #   - orphan dirs (no Redis key) older than CLEANUP_GRACE_SECONDS
+  # Never touches `queued`/`processing` jobs.
+  #
+  # Manual one-shot:
+  #   docker compose run --rm worker-cleanup python -m app.cleanup --once
+  # =========================================================================
+  worker-cleanup:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: easy-backend:latest
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker.cleanup_entrypoint"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      JOB_TTL_SECONDS: ${JOB_TTL_SECONDS:-86400}
+      CLEANUP_INTERVAL_SECONDS: ${CLEANUP_INTERVAL_SECONDS:-300}
+      CLEANUP_GRACE_SECONDS: ${CLEANUP_GRACE_SECONDS:-3600}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - job-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   redis-data:
   job-data:
